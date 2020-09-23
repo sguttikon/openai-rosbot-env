@@ -17,3 +17,8 @@ Gym - [doc](https://gym.openai.com/docs/)
 
 #### rosbots
 * TurtleBot3 [turtle-bot3](https://github.com/ROBOTIS-GIT/turtlebot3) , [turtle-bot3-msgs](https://github.com/ROBOTIS-GIT/turtlebot3_msgs) , [turtle-bot3-simulations](https://github.com/ROBOTIS-GIT/turtlebot3_simulations) , [turtle-bot3-driver](https://github.com/ROBOTIS-GIT/hls_lfcd_lds_driver)
+
+
+
+#### Notes:
+* configure #export TURTLEBOT3_MODEL=waffle in .bashrc file
