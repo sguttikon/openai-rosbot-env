@@ -37,12 +37,12 @@ class RosbotGazeboEnv(gym.Env):
         """
 
         # reset the gazebo simulation
-        self.__reset_sim()
+        self._reset_sim()
         # set environment variables each time we reset
-        self.__init_env_variables()
+        self._init_env_variables()
         # get latest observation
-        obs = self.__get_obs()
-
+        obs = self._get_obs()
+        rospy.loginfo('status: environment is reset')
         return obs
 
     def close(self):
@@ -86,20 +86,20 @@ class RosbotGazeboEnv(gym.Env):
 
         # execute the action
         self.gazebo.unpause_sim()
-        self.__set_action()
+        self._set_action(action)
         self.gazebo.pause_sim()
 
         # compute the required fields
-        obs = self.__get_obs()
-        done = self.__is_done()
-        reward = self._compute_reward(obs, reward)
+        obs = self._get_obs()
+        done = self._is_done()
+        reward = self._compute_reward(obs, done)
         info = {}
 
         return obs, reward, done, info
 
     # ===== =====
 
-    def __reset_sim(self):
+    def _reset_sim(self):
         """
         Custom logic to reset the gazebo simulation
 
@@ -107,7 +107,7 @@ class RosbotGazeboEnv(gym.Env):
 
         # pre-reset tasks
         self.gazebo.unpause_sim()
-        self.__check_all_systems_are_ready()
+        self._check_all_systems_are_ready()
         self._set_init_pose()
         self.gazebo.pause_sim()
 
@@ -116,46 +116,46 @@ class RosbotGazeboEnv(gym.Env):
 
         # check if everything working fine after reset
         self.gazebo.unpause_sim()
-        self.__check_all_systems_are_ready()
+        self._check_all_systems_are_ready()
         self.gazebo.pause_sim()
 
-    def __init_env_variables(self):
+    def _init_env_variables(self):
         """
         Initialize environment variables
         """
         raise NotImplementedError()
 
-    def __set_init_pose(self):
+    def _set_init_pose(self):
         """
         Set the initial pose of the rosbot
         """
         raise NotImplementedError()
 
-    def __get_obs(self):
+    def _get_obs(self):
         """
         Return the observation from the environment
         """
         raise NotImplementedError()
 
-    def __check_all_systems_are_ready(self):
+    def _check_all_systems_are_ready(self):
         """
         Checks all sensors and other simulation systems are operational
         """
         raise NotImplementedError()
 
-    def __is_done(self):
+    def _is_done(self):
         """
         Indicates whether or not the episode is done
         """
         raise NotImplementedError()
 
-    def __compute_reward(self, observation, done):
+    def _compute_reward(self, observation, done):
         """
         Calculate the reward based on the observation
         """
         raise NotImplementedError()
 
-    def __set_action(self, action):
+    def _set_action(self, action):
         """
         Apply the give action to the environment
         """

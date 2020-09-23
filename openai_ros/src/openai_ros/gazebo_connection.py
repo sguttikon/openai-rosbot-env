@@ -21,7 +21,7 @@ class GazeboConnection():
         """
 
         # reset the simulation
-        self.__reset_type = reset_type
+        self._reset_type = reset_type
         self.reset_sim()
 
         # HACK: pause the simulation
@@ -31,23 +31,23 @@ class GazeboConnection():
 
     def reset_sim(self):
         """
-        Using __reset_type variable's value the corresponding reset service
+        Using _reset_type variable's value the corresponding reset service
         of gazebo is called
 
         """
 
-        if self.__reset_type == 'SIMULATION':
+        if self._reset_type == 'SIMULATION':
             # reset the entire simulation including the time
             service_name = '/gazebo/reset_simulation'
             service_class = Empty
-        elif self.__reset_type == 'WORLD':
+        elif self._reset_type == 'WORLD':
             # reset the model's poses
             service_name = '/gazebo/reset_world'
             service_class = Empty
         else:
             # do nothing
             return
-        self.__call_service(service_name, service_class)
+        self._call_service(service_name, service_class)
 
 
     def pause_sim(self):
@@ -58,7 +58,7 @@ class GazeboConnection():
 
         service_name = '/gazebo/pause_physics'
         service_class = Empty
-        self.__call_service(service_name, service_class)
+        self._call_service(service_name, service_class)
 
 
     def unpause_sim(self):
@@ -69,10 +69,10 @@ class GazeboConnection():
 
         service_name = '/gazebo/unpause_physics'
         service_class = Empty
-        self.__call_service(service_name, service_class)
+        self._call_service(service_name, service_class)
 
 
-    def __call_service(self, service_name: str, service_class, max_retry: int = 10):
+    def _call_service(self, service_name: str, service_class, max_retry: int = 10):
         """
         Create a service proxy for given service_name and service_class and
         call the service

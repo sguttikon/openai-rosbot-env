@@ -27,60 +27,78 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         super(TurtleBot3Env, self).__init__(reset_type = 'SIMULATION')
 
-        self.__laser_scan = None
-        self.__imu_data = None
-        self.__odom_data = None
+        self._laser_scan = None
+        self._imu_data = None
+        self._odom_data = None
 
         # setup subscribers and publishers
         self.gazebo.unpause_sim()
-        self.__check_all_systems_are_ready()
+        self._check_all_systems_are_ready()
 
-        rospy.Subscriber('/scan', LaserScan, self.__laser_scan_callback)
-        rospy.Subscriber('/imu', Imu, self.__imu_data_callback)
-        rospy.Subscriber('/odom', Odometry, self.__odom_data_callback)
+        rospy.Subscriber('/scan', LaserScan, self._laser_scan_callback)
+        rospy.Subscriber('/imu', Imu, self._imu_data_callback)
+        rospy.Subscriber('/odom', Odometry, self._odom_data_callback)
 
-        self.__cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
+        self._cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
 
-        self.__check_publishers_connection()
-        self.__check_all_systems_are_ready()
+        self._check_publishers_connection()
+        self._check_all_systems_are_ready()
         self.gazebo.pause_sim()
         rospy.loginfo('status: system check passed')
 
-    def __check_all_systems_are_ready(self):
+    def get_laser_scan(self):
+        """
+        Laser Scan Getter
+        """
+        return self._laser_scan
+
+    def get_imu_data(self):
+        """
+        Imu data Getter
+        """
+        return self._imu_data
+
+    def get_odom_data(self):
+        """
+        Odometry data Getter
+        """
+        return self._odom_data
+
+    def _check_all_systems_are_ready(self):
         """
         Checks all sensors and other simulation systems are operational
         """
 
-        self.__check_all_sensors_are_ready()
+        self._check_all_sensors_are_ready()
 
-    def __check_publishers_connection(self):
+    def _check_publishers_connection(self):
         """
         Checks all publishers are operational
         """
-        self.__check_cmd_vel_pub_ready()
+        self._check_cmd_vel_pub_ready()
 
-    def __check_cmd_vel_pub_ready(self):
+    def _check_cmd_vel_pub_ready(self):
         """
         Checks command velocity is operational
         """
         rate = rospy.Rate(10) # 10hz
-        while self.__cmd_vel_pub.get_num_connections() == 0 and not rospy.is_shutdown():
+        while self._cmd_vel_pub.get_num_connections() == 0 and not rospy.is_shutdown():
             try:
                 rate.sleep()
             except rospy.ROSInterruptException as e:
                 # do nothing
                 pass
 
-    def __check_all_sensors_are_ready(self):
+    def _check_all_sensors_are_ready(self):
         """
         Checks all sensors are operational
         """
 
-        self.__check_laser_scan_is_ready()
-        self.__check_imu_data_is_ready()
-        self.__check_odom_data_is_ready()
+        self._check_laser_scan_is_ready()
+        self._check_imu_data_is_ready()
+        self._check_odom_data_is_ready()
 
-    def __check_laser_scan_is_ready(self):
+    def _check_laser_scan_is_ready(self):
         """
         Checks laser scanner is operational
 
@@ -93,10 +111,10 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/scan'
         topic_class = LaserScan
         time_out = 1.0
-        self.__laser_scan  = self.__check_sensor_data_is_ready(topic_name, topic_class, time_out)
-        return self.__laser_scan
+        self._laser_scan  = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        return self._laser_scan
 
-    def __check_imu_data_is_ready(self):
+    def _check_imu_data_is_ready(self):
         """
         Checks imu is operational
 
@@ -109,10 +127,10 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/imu'
         topic_class = Imu
         time_out = 5.0
-        self.__imu_data = self.__check_sensor_data_is_ready(topic_name, topic_class, time_out)
-        return self.__imu_data
+        self._imu_data = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        return self._imu_data
 
-    def __check_odom_data_is_ready(self):
+    def _check_odom_data_is_ready(self):
         """
         Checks odom is operational
 
@@ -125,10 +143,10 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/odom'
         topic_class = Odometry
         time_out = 5.0
-        self.__odom_data = self.__check_sensor_data_is_ready(topic_name, topic_class, time_out)
-        return self.__odom_data
+        self._odom_data = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        return self._odom_data
 
-    def __check_sensor_data_is_ready(self, topic_name: str, topic_class, time_out: float):
+    def _check_sensor_data_is_ready(self, topic_name: str, topic_class, time_out: float):
         """
         Check whethe the sensor is operational by
             1. subscribing to topic_name
@@ -155,17 +173,17 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         sensor_data = None
         # loop until the ros is shutdown or service call is successful
-        while sensor_data is not None and not rospy.is_shutdown():
+        while sensor_data is None and not rospy.is_shutdown():
             try:
                 # create a new subscription to topic, receive one message and then unsubscribe
                 sensor_data = rospy.wait_for_message(topic_name, topic_class, timeout = time_out)
-            except ROSException as e:
+            except rospy.ROSException as e:
                 # do nothing
                 pass
 
         return sensor_data
 
-    def __laser_scan_callback(self, data):
+    def _laser_scan_callback(self, data):
         """
         This function is called when laser scan is received
 
@@ -175,9 +193,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             data received from laser scan topic
         """
 
-        self.__laser_scan = data
+        self._laser_scan = data
 
-    def __imu_data_callback(self, data):
+    def _imu_data_callback(self, data):
         """
         This function is called when imu data is received
 
@@ -187,9 +205,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             data received from imu topic
         """
 
-        self.__imu_data = data
+        self._imu_data = data
 
-    def __odom_data_callback(self, data):
+    def _odom_data_callback(self, data):
         """
         This function is called when odom data is received
 
@@ -199,9 +217,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             data received from odom topic
         """
 
-        self.__odom_data = data
+        self._odom_data = data
 
-    def __move_base(self, linear_speed: float, angular_speed: float,
+    def _move_base(self, linear_speed: float, angular_speed: float,
                     motion_error: float = 0.05, update_rate: float = 10):
         """
         Move the rosbot base, based on the linear and angular speeds.
@@ -223,13 +241,13 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         cmd_vel_msg = Twist()
         cmd_vel_msg.linear.x = linear_speed
         cmd_vel_msg.angular.z = angular_speed
-        self.__check_cmd_vel_pub_ready()
-        self.__cmd_vel_pub.publish(cmd_vel_msg)
+        self._check_cmd_vel_pub_ready()
+        self._cmd_vel_pub.publish(cmd_vel_msg)
 
         # wait for the given twist message to be executed correctly
-        delta = self.__wait_until_twist_achieved(cmd_vel_msg, motion_error, update_rate)
+        delta = self._wait_until_twist_achieved(cmd_vel_msg, motion_error, update_rate)
 
-    def __wait_until_twist_achieved(self, cmd_vel_msg: Twist, motion_error: float, update_rate: float):
+    def _wait_until_twist_achieved(self, cmd_vel_msg: Twist, motion_error: float, update_rate: float):
         """
         Wait for the robot to achieve given cmd_vel, by referencing the odometry velocity readings
 
@@ -259,11 +277,10 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         end_time = 0.0
 
         # loop until the twist is achieved
-        while not rospy.is_shutdonw():
-            # for turtlebot3 the odom angular readings are inverted, so invert the sign
-            current_odom = self.__check_odom_data_is_ready()
+        while not rospy.is_shutdown():
+            current_odom = self._check_odom_data_is_ready()
             odom_linear_vel = current_odom.twist.twist.linear.x
-            odom_linear_vel = -1 * current_odom.twist.twist.angular.z
+            odom_angular_vel = current_odom.twist.twist.angular.z
 
             # check whether linear and angular veloctiy are valid
             is_linear_vel_valid = (
