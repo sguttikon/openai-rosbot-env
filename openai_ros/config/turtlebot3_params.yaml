@@ -1,0 +1,15 @@
+turtlebot3:   # name_space
+
+    n_actions:  3                 # available actions - MoveForward, TurtnLeft, TurnRight
+
+    # laser scan parameters
+    skip_beam_interval:   5       # number of laser readings we skip betweem
+    max_laser_value:    6         # TODO
+    min_laser_value:    0         # TODO
+
+    # veloctiy parameters
+    init_linear_speed:    0.0     # initial linear speed when start of each episode
+    init_angular_speed:   0.0     # initial angular speed when start of each episode
+    linear_forward_speed: 0.5     # linear speed when moving forward
+    linear_turn_speed:    0.05    # linear speed when turning
+    angular_speed:        0.3     # angular speed when turning left/right

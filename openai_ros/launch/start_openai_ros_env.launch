@@ -1,0 +1,6 @@
+<launch>
+  <rosparam command='load' file='$(find openai_ros)/config/turtlebot3_params.yaml' />
+
+  <!-- make sure test_gym_env.py is set executable using chmod +x -->
+  <node pkg='openai_ros' name='test_gym_env' type='test_gym_env.py' output='screen' />
+</launch>
