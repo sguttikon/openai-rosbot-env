@@ -3,7 +3,7 @@
 import rospy
 import gym
 from gym.utils import seeding
-from gazebo_connection import GazeboConnection
+from openai_ros.gazebo_connection import GazeboConnection
 
 class RosbotGazeboEnv(gym.Env):
     """
@@ -139,7 +139,7 @@ class RosbotGazeboEnv(gym.Env):
 
     def __check_all_systems_are_ready(self):
         """
-        Checks all sensors and publishers are operational
+        Checks all sensors and other simulation systems are operational
         """
         raise NotImplementedError()
 

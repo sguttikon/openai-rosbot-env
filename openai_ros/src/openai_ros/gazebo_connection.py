@@ -27,7 +27,7 @@ class GazeboConnection():
         # HACK: pause the simulation
         self.pause_sim()
 
-        rospy.loginfo('gazebo connection establised succesfully')
+        rospy.loginfo('status: gazebo connection establised')
 
     def reset_sim(self):
         """
@@ -82,7 +82,7 @@ class GazeboConnection():
         service_name: str
             name of the service
         service_class:
-            class of the service
+            service type
         max_retry: int
             maximum number of times to retry calling the service
 
