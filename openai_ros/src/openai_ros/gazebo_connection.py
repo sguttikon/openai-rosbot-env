@@ -16,10 +16,8 @@ class GazeboConnection():
         ----------
         reset_type: str
             This paremeter is used within the reset_sim()
-            Aossible values are: ['SIMULATION', 'WORLD']
+            Possible values are: ['SIMULATION', 'WORLD']
 
-        Returns
-        -------
         """
 
         # reset the simulation
@@ -36,10 +34,6 @@ class GazeboConnection():
         Using __reset_type variable's value the corresponding reset service
         of gazebo is called
 
-        Parameters
-        ----------
-        Returns
-        -------
         """
 
         if self.__reset_type == 'SIMULATION':
@@ -60,10 +54,6 @@ class GazeboConnection():
         """
         Pause the physics updates of gazebo
 
-        Parameters
-        ----------
-        Returns
-        -------
         """
 
         service_name = '/gazebo/pause_physics'
@@ -75,10 +65,6 @@ class GazeboConnection():
         """
         Resume the phsics update of gazebo
 
-        Parameters
-        ----------
-        Returns
-        -------
         """
 
         service_name = '/gazebo/unpause_physics'
@@ -99,8 +85,7 @@ class GazeboConnection():
             class of the service
         max_retry: int
             maximum number of times to retry calling the service
-        Returns
-        -------
+
         """
 
         # wait until the service becomes available
