@@ -1,0 +1,12 @@
+[submodule "rosbots/turtlebot/turtlebot3"]
+	path = rosbots/turtlebot/turtlebot3
+	url = https://github.com/ROBOTIS-GIT/turtlebot3.git
+[submodule "rosbots/turtlebot/turtlebot3_msgs"]
+	path = rosbots/turtlebot/turtlebot3_msgs
+	url = https://github.com/ROBOTIS-GIT/turtlebot3_msgs.git
+[submodule "rosbots/turtlebot/turtlebot3_simulations"]
+	path = rosbots/turtlebot/turtlebot3_simulations
+	url = https://github.com/ROBOTIS-GIT/turtlebot3_simulations.git
+[submodule "rosbots/turtlebot/hls_lfcd_lds_driver"]
+	path = rosbots/turtlebot/hls_lfcd_lds_driver
+	url = https://github.com/ROBOTIS-GIT/hls_lfcd_lds_driver.git
