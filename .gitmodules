@@ -10,3 +10,6 @@
 [submodule "rosbots/turtlebot/hls_lfcd_lds_driver"]
 	path = rosbots/turtlebot/hls_lfcd_lds_driver
 	url = https://github.com/ROBOTIS-GIT/hls_lfcd_lds_driver.git
+[submodule "gazebo_models/map2gazebo"]
+	path = gazebo_models/map2gazebo
+	url = https://github.com/shilohc/map2gazebo.git
