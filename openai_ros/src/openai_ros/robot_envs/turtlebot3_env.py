@@ -5,6 +5,7 @@ from openai_ros import rosbot_gazebo_env
 from sensor_msgs.msg import LaserScan, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+from gazebo_msgs.msg import ModelStates
 
 class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
     """
@@ -49,9 +50,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._check_all_systems_are_ready()
         self.gazebo.pause_sim()
         rospy.loginfo('status: system check passed')
-    
+
     #### public methods ####
-    
+
     def get_laser_scan(self):
         """
         Laser Scan Getter
@@ -81,13 +82,13 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
     	AMCL particle cloud Getter
     	"""
     	return self._particle_cloud
-    
+
     def get_gazebo_pose(self):
     	"""
     	Gazebo(ground truth) pose Getter
     	"""
     	return self._gazebo_pose
-    
+
     #### private methods ####
 
     def _check_all_systems_are_ready(self):
@@ -97,6 +98,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         self._check_all_sensors_are_ready()
         self._check_amcl_data_is_ready()
+        self._check_gazebo_data_is_ready()
 
     def _check_publishers_connection(self):
         """
@@ -132,6 +134,26 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Checks amcl is operational
         """
         pass
+
+    def _check_gazebo_data_is_ready(self):
+        """
+        Checks gazebo is operational
+
+        Returns
+        -------
+        gazebo_pose: rospy.Message
+            Message
+        """
+
+        topic_name = '/gazebo/model_states'
+        topic_class = ModelStates
+        time_out = 1.0
+        data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+
+        # TODO: do we also need twist (velocity) of turtlebot ??
+        # preprocess received data
+        turtlebot_idx = data.name.index('turtlebot3')
+        self._gazebo_pose = data.pose[turtlebot_idx]
 
     def _check_laser_scan_is_ready(self):
         """
@@ -341,7 +363,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         # wait for the given twist message to be executed correctly
         delta = self._wait_until_twist_achieved(cmd_vel_msg, motion_error, update_rate)
-        
+
         # unpublish twist message
         cmd_vel_msg.linear.x = 0.0
         cmd_vel_msg.angular.z = 0.0

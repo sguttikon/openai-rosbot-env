@@ -88,6 +88,7 @@ class RosbotGazeboEnv(gym.Env):
         # execute the action
         self.gazebo.unpause_sim()
         self._set_action(action)
+        self._check_all_systems_are_ready() # get latest system data
         self.gazebo.pause_sim()
 
         # compute the required fields
