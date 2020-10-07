@@ -4,7 +4,7 @@ import rospy
 from openai_ros import rosbot_gazebo_env
 from sensor_msgs.msg import LaserScan, Imu
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
 
 class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
     """
@@ -32,6 +32,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._odom_data = None
         self._particle_cloud = None
         self._amcl_pose = None
+        self._gazebo_pose = None
 
         # setup subscribers and publishers
         self.gazebo.unpause_sim()
@@ -42,18 +43,15 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         rospy.Subscriber('/odom', Odometry, self._odom_data_callback)
 
         self._cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
+        self._init_pose_pub = rospy.Publisher('/initialpose', PoseWithCovarianceStamped, queue_size = 1)
 
         self._check_publishers_connection()
         self._check_all_systems_are_ready()
         self.gazebo.pause_sim()
         rospy.loginfo('status: system check passed')
-
-    def _init_amcl(self):
-        """
-        Initialize amcl
-        """
-        raise NotImplementedError()
-
+    
+    #### public methods ####
+    
     def get_laser_scan(self):
         """
         Laser Scan Getter
@@ -71,18 +69,26 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Odometry data Getter
         """
         return self._odom_data
-    
+
     def get_amcl_pose(self):
     	"""
     	AMCL pose Getter
     	"""
     	return self._amcl_pose
-    
+
     def get_particle_cloud(self):
     	"""
     	AMCL particle cloud Getter
     	"""
     	return self._particle_cloud
+    
+    def get_gazebo_pose(self):
+    	"""
+    	Gazebo(ground truth) pose Getter
+    	"""
+    	return self._gazebo_pose
+    
+    #### private methods ####
 
     def _check_all_systems_are_ready(self):
         """
@@ -90,8 +96,6 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
 
         self._check_all_sensors_are_ready()
-
-
         self._check_amcl_data_is_ready()
 
     def _check_publishers_connection(self):
@@ -99,18 +103,20 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Checks all publishers are operational
         """
         self._check_cmd_vel_pub_ready()
+        self._check_init_pose_pub_ready()
 
     def _check_cmd_vel_pub_ready(self):
         """
         Checks command velocity is operational
         """
-        rate = rospy.Rate(10) # 10hz
-        while self._cmd_vel_pub.get_num_connections() == 0 and not rospy.is_shutdown():
-            try:
-                rate.sleep()
-            except rospy.ROSInterruptException as e:
-                # do nothing
-                pass
+        self._check_publisher_is_ready(self._cmd_vel_pub)
+
+
+    def _check_init_pose_pub_ready(self):
+    	"""
+    	Checks initial pose is operational
+    	"""
+    	pass
 
     def _check_all_sensors_are_ready(self):
         """
@@ -140,7 +146,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/scan'
         topic_class = LaserScan
         time_out = 1.0
-        self._laser_scan  = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        self._laser_scan  = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
         return self._laser_scan
 
     def _check_imu_data_is_ready(self):
@@ -156,7 +162,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/imu'
         topic_class = Imu
         time_out = 5.0
-        self._imu_data = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        self._imu_data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
         return self._imu_data
 
     def _check_odom_data_is_ready(self):
@@ -172,12 +178,12 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/odom'
         topic_class = Odometry
         time_out = 5.0
-        self._odom_data = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        self._odom_data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
         return self._odom_data
 
-    def _check_sensor_data_is_ready(self, topic_name: str, topic_class, time_out: float):
+    def _check_topic_data_is_ready(self, topic_name: str, topic_class, time_out: float):
         """
-        Check whethe the sensor is operational by
+        Check whether the topic is operational by
             1. subscribing to topic_name
             2. receive one topic_class message
             3. unsubscribe
@@ -211,7 +217,27 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
                 pass
 
         return sensor_data
-    
+
+    def _check_publisher_is_ready(self, publisher):
+        """
+        Check whether publisher is operational by checking the number of connections
+
+        Parameters
+        ----------
+        publisher:
+            publisher instance
+        """
+
+        # TODO: do we need to add max retry limit ??
+
+        rate = rospy.Rate(10) # 10hz
+        while publisher.get_num_connections() == 0 and not rospy.is_shutdown():
+            try:
+                rate.sleep()
+            except rospy.ROSInterruptException as e:
+                # do nothing
+                pass
+
     def _call_service(self, service_name: str, service_class, max_retry: int = 10):
         """
         Create a service proxy for given service_name and service_class and
@@ -315,6 +341,12 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         # wait for the given twist message to be executed correctly
         delta = self._wait_until_twist_achieved(cmd_vel_msg, motion_error, update_rate)
+        
+        # unpublish twist message
+        cmd_vel_msg.linear.x = 0.0
+        cmd_vel_msg.angular.z = 0.0
+        self._check_cmd_vel_pub_ready()
+        self._cmd_vel_pub.publish(cmd_vel_msg)
 
     def _wait_until_twist_achieved(self, cmd_vel_msg: Twist, motion_error: float, update_rate: float):
         """

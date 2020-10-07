@@ -5,6 +5,8 @@ from openai_ros.robot_envs import turtlebot3_env
 from gym import spaces
 from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped
 from std_srvs.srv import Empty
+from tf.transformations import quaternion_from_euler
+import dynamic_reconfigure.client as dynamic_reconfig
 
 import numpy as np
 
@@ -44,12 +46,18 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         topic_name = '/particlecloud'
         topic_class = PoseArray
         time_out = 5.0
-        self._particle_cloud = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        self._particle_cloud = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
 
         topic_name = '/amcl_pose'
         topic_class = PoseWithCovarianceStamped
         time_out = 1.0
-        self._amcl_pose = self._check_sensor_data_is_ready(topic_name, topic_class, time_out)
+        self._amcl_pose = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+
+    def _check_init_pose_pub_ready(self):
+        """
+        Checks initial pose is operational
+        """
+        self._check_publisher_is_ready(self._init_pose_pub)
 
     def _init_amcl(self, is_global=True):
         """
@@ -60,8 +68,44 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
+        # publish initialpose for amcl
+        init_pose_msg = PoseWithCovarianceStamped()
+        init_pose_msg.header.stamp = rospy.get_rostime()
+        init_pose_msg.header.frame_id = 'map'
+
+        # position
+        init_pose_msg.pose.pose.position.x = 0.0    # pose_x
+        init_pose_msg.pose.pose.position.y = 0.0    # pose_y
+        init_pose_msg.pose.pose.position.z = 0.0
+        # orientation
+        quaternion = quaternion_from_euler(0.0, 0.0, 0.0)   # pose_a
+        init_pose_msg.pose.pose.orientation.x = quaternion[0]
+        init_pose_msg.pose.pose.orientation.y = quaternion[1]
+        init_pose_msg.pose.pose.orientation.z = quaternion[2]
+        init_pose_msg.pose.pose.orientation.w = quaternion[3]
+        # covariance
+        covariance = [0.0]*36 # 6x6 covariance
+        covariance[6*0 + 0] = 0.5 * 0.5 # cov_xx
+        covariance[6*1 + 1] = 0.5 * 0.5 # cov_yy
+        covariance[6*5 + 5] = (np.pi/12.0) *(np.pi/12.0)    # cov_aa
+        init_pose_msg.pose.covariance = covariance
+
+        self._init_pose_pub.publish(init_pose_msg)
+
         if is_global:
+            # TODO: do we need selective resampling ??
+
+            # dynamic reconfigure
+            particles = 20000
+            client = dynamic_reconfig.Client('/amcl')
+            params = {
+                        'max_particles' : particles,
+                     }
+            config = client.update_configuration(params)
+
             self._init_global_localization()
+
+        rospy.loginfo('status: amcl initialized')
 
     def _init_global_localization(self):
         """
@@ -79,6 +123,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         self._move_base( self._init_linear_speed, self._init_angular_speed,
                          self._motion_error, self._update_rate )
+
+        self._init_amcl(is_global=True)
 
     def _init_env_variables(self):
         """
