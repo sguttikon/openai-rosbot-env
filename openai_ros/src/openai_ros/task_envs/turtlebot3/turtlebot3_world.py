@@ -49,7 +49,7 @@ class TurtleBot3WorldEnv(turtlebot3_env.TurtleBot3Env):
         self._motion_error = 0.05
         self._update_rate = 30
 
-        rospy.loginfo('status: TurtleBot3SlamEnv is ready')
+        rospy.loginfo('status: TurtleBot3WorldEnv is ready')
 
     def _set_init_pose(self):
         """
@@ -135,7 +135,7 @@ class TurtleBot3WorldEnv(turtlebot3_env.TurtleBot3Env):
     def _compute_reward(self, observation, done):
         """
         Calculate the reward based on the observation
-        
+
         """
 
         # TODO
