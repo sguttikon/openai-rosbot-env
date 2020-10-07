@@ -23,6 +23,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         super(TurtleBot3LocalizeEnv, self).__init__()
 
+        self._motion_error = 0.05
+        self._update_rate = 30
+        self._init_linear_speed = 0.0
+        self._init_angular_speed = 0.0
+        self._linear_forward_speed = 0.5
+        self._linear_turn_speed = 0.05
+        self._angular_speed = 0.3
+
         rospy.loginfo('status: TurtleBot3LocalizeEnv is ready')
 
     def _check_amcl_data_is_ready(self):
@@ -69,7 +77,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Set the initial pose of the turtlebot3
         """
 
-        pass
+        self._move_base( self._init_linear_speed, self._init_angular_speed,
+                         self._motion_error, self._update_rate )
 
     def _init_env_variables(self):
         """
@@ -82,3 +91,53 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Return the observation from the environment
         """
         pass
+
+    def _is_done(self):
+        """
+        Indicates whether or not the episode is done
+
+        """
+
+        # TODO
+        pass
+
+    def _compute_reward(self, observation, done):
+        """
+        Calculate the reward based on the observation
+
+        """
+
+        # TODO
+        return 0
+
+    def _set_action(self, action: int):
+        """
+        Apply the give action to the environment
+
+        Parameters
+        ----------
+        action: int
+            based on the action id number corresponding linear and angular speed for the rosbot is set
+
+        Action List:
+        * 0 = MoveFoward
+        * 1 = TurnLeft
+        * 2 = TurnRight
+
+        """
+
+        if action == 0:     # move forward
+            linear_speed = self._linear_forward_speed
+            angular_speed = 0.0
+        elif action == 1:   # turn left
+            linear_speed = self._linear_turn_speed
+            angular_speed = self._angular_speed
+        elif action == 2:   # turn right
+            linear_speed = self._linear_turn_speed
+            angular_speed = -1 * self._angular_speed
+        else:               # do nothing / stop
+            linear_speed = 0.0
+            angular_speed = 0.0
+
+        self._move_base( linear_speed, angular_speed,
+                         self._motion_error, self._update_rate )

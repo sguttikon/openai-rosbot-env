@@ -71,6 +71,18 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Odometry data Getter
         """
         return self._odom_data
+    
+    def get_amcl_pose(self):
+    	"""
+    	AMCL pose Getter
+    	"""
+    	return self._amcl_pose
+    
+    def get_particle_cloud(self):
+    	"""
+    	AMCL particle cloud Getter
+    	"""
+    	return self._particle_cloud
 
     def _check_all_systems_are_ready(self):
         """

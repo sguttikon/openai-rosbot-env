@@ -53,6 +53,7 @@ class RosbotGazeboEnv(gym.Env):
 
         # initiate node shutdown
         rospy.signal_shutdown('closing RosbotGazeboEnv')
+        rospy.loginfo('status: environment is closed')
 
     def render(self):
         """
