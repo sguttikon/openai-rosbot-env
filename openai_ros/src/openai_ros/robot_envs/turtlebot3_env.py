@@ -30,6 +30,8 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._laser_scan = None
         self._imu_data = None
         self._odom_data = None
+        self._particle_cloud = None
+        self._amcl_pose = None
 
         # setup subscribers and publishers
         self.gazebo.unpause_sim()
@@ -45,6 +47,12 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._check_all_systems_are_ready()
         self.gazebo.pause_sim()
         rospy.loginfo('status: system check passed')
+
+    def _init_amcl(self):
+        """
+        Initialize amcl
+        """
+        raise NotImplementedError()
 
     def get_laser_scan(self):
         """
@@ -70,6 +78,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
 
         self._check_all_sensors_are_ready()
+
+
+        self._check_amcl_data_is_ready()
 
     def _check_publishers_connection(self):
         """
@@ -97,6 +108,12 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._check_laser_scan_is_ready()
         self._check_imu_data_is_ready()
         self._check_odom_data_is_ready()
+
+    def _check_amcl_data_is_ready(self):
+        """
+        Checks amcl is operational
+        """
+        pass
 
     def _check_laser_scan_is_ready(self):
         """
@@ -182,6 +199,46 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
                 pass
 
         return sensor_data
+    
+    def _call_service(self, service_name: str, service_class, max_retry: int = 10):
+        """
+        Create a service proxy for given service_name and service_class and
+        call the service
+
+        Parameters
+        ----------
+        service_name: str
+            name of the service
+        service_class:
+            service type
+        max_retry: int
+            maximum number of times to retry calling the service
+
+        """
+
+        # wait until the service becomes available
+        rospy.wait_for_service(service_name, timeout=None)
+        # create callable proxy to the service
+        service_proxy = rospy.ServiceProxy(service_name, service_class)
+
+        is_call_successful = False
+        counter = 0
+
+        # loop until the counter reached max retry limit or
+        # until the ros is shutdown or service call is successful
+        while not is_call_successful and not rospy.is_shutdown():
+            if counter < max_retry:
+                try:
+                    # call service
+                    service_proxy()
+                    is_call_successful = True
+                except rospy.ServiceException as e:
+                    # service call failed increment the counter
+                    counter += 1
+            else:
+                # max retry count reached
+                rospy.logerr('call to the service %s failed', service_name)
+                break
 
     def _laser_scan_callback(self, data):
         """

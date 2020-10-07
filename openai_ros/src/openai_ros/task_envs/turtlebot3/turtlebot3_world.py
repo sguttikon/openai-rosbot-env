@@ -53,7 +53,7 @@ class TurtleBot3WorldEnv(turtlebot3_env.TurtleBot3Env):
 
     def _set_init_pose(self):
         """
-        Set the initial pose of the rosbot
+        Set the initial pose of the turtlebot3
 
         """
 
