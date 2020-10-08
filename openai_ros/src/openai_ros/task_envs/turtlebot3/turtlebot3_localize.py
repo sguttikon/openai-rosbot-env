@@ -11,6 +11,8 @@ import dynamic_reconfigure.client as dynamic_reconfig
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge
+from matplotlib.patches import Ellipse
+from matplotlib import transforms
 import numpy as np
 
 class Map():
@@ -77,10 +79,15 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._gt_heading_plt = None
         self._amcl_pose_plt = None
         self._amcl_heading_plt = None
+        self._amcl_confidence_plt = None
 
         rospy.loginfo('status: TurtleBot3LocalizeEnv is ready')
 
     def render(self, mode='human'):
+        """
+        render the output in matplotlib plots
+        """
+
         if self._map_data is not None:
             # environment map
             self._draw_map(self._map_data)
@@ -88,19 +95,24 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             self._gt_pose_plt, self._gt_heading_plt = \
                 self._draw_robot_pose(self._gazebo_pose,
                                       self._gt_pose_plt,
-                                      self._gt_heading_plt, 'b')
+                                      self._gt_heading_plt, 'blue')
             # amcl pose
             self._amcl_pose_plt, self._amcl_heading_plt = \
                 self._draw_robot_pose(self._amcl_pose.pose.pose,
                                       self._amcl_pose_plt,
-                                      self._amcl_heading_plt, 'g')
+                                      self._amcl_heading_plt, 'green')
+            # amcl pose covariance
+            self._amcl_confidence_plt = \
+                self._draw_pose_confidence(self._amcl_pose.pose.pose,
+                                           self._amcl_pose.pose.covariance,
+                                           self._amcl_confidence_plt, 'green')
 
         plt.draw()
         plt.pause(0.00000000001)
 
     def _draw_map(self, map):
         """
-        Draw map
+        Draw environment map
 
         Parameters
         ----------
@@ -134,7 +146,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
             self._is_new_map = False
 
-    def _draw_robot_pose(self, robot_pose, pose_plt, heading_plt, color: str):
+    def _draw_robot_pose(self, robot_pose, pose_plt: Wedge, heading_plt, color: str):
         """
         Draw robot pose
 
@@ -142,6 +154,19 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         ----------
         robot_pose: geometry_msgs.msg._Pose.Pose
             robot's pose
+        pose_plt: matplotlib.patches.Wedge
+            plot of robot position
+        heading_plt: matplotlib.lines.Line2D
+            plot of robot heading
+        color: str
+            color to render for robot
+
+        Returns
+        -------
+        pose_plt: matplotlib.patches.Wedge
+            updated plot of robot position
+        heading_plt: matplotlib.lines.Line2D
+            updated plot of robot heading
         """
         if robot_pose is None:
             return
@@ -171,13 +196,61 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         return pose_plt, heading_plt
 
-    def _check_amcl_data_is_ready(self):
+    def _draw_pose_confidence(self, robot_pose, covariance, confidence_plt, color: str, n_std=1.0):
         """
-        Checks amcl topic is operational
+        Draw confidence ellipse around the robot pose
+
+        Parameters
+        ----------
+        robot_pose: geometry_msgs.msg._Pose.Pose
+            robot's pose
+        covariance:
+            robot's pose covariance
+        confidence_plt: matplotlib.patches.Ellipse
+            plot of robot position confidence
+        color: str
+            color to render for confidence
+        n_std: float
+            number of std to determine ellipse's radius
 
         Returns
         -------
+        confidence_plt: matplotlib.patches.Ellipse
+            updated plot of robot position confidence
+        """
 
+        # reference  https://matplotlib.org/devdocs/gallery/statistics/confidence_ellipse.html
+        # cov_xy / np.sqrt(cov_xx * cov_yy)
+        pearson = covariance[6*0 + 1]/np.sqrt(covariance[6*0 + 0] * covariance[6*1 + 1])
+
+        # compute eigenvalues and rescale
+        ell_radius_x = np.sqrt(1 + pearson) / self._map_data.scale
+        ell_radius_y = np.sqrt(1 - pearson) / self._map_data.scale
+
+        # compute mean and std
+        scale_x = np.sqrt(covariance[6*0 + 0] / self._map_data.scale) * n_std
+        mean_x = robot_pose.position.x / self._map_data.scale
+        scale_y = np.sqrt(covariance[6*1 + 1] / self._map_data.scale) * n_std
+        mean_y = robot_pose.position.y / self._map_data.scale
+
+        transform = transforms.Affine2D().rotate_deg(45) \
+                                         .scale(scale_x, scale_y) \
+                                         .translate(mean_x, mean_y)
+        if confidence_plt == None:
+            confidence_plt = Ellipse((0, 0), width=ell_radius_x, height=ell_radius_y,
+                                     facecolor='none', edgecolor=color)
+            confidence_plt.set_transform(transform + self._plt_ax.transData)
+            self._plt_ax.add_artist(confidence_plt)
+        else:
+            confidence_plt.width = ell_radius_x
+            confidence_plt.height = ell_radius_y
+            confidence_plt.set_transform(transform + self._plt_ax.transData)
+
+        return confidence_plt
+
+    def _check_amcl_data_is_ready(self):
+        """
+        Checks amcl topics are operational
         """
         topic_name = '/particlecloud'
         topic_class = PoseArray
@@ -227,7 +300,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         Parameters
         ----------
-
+        is_global: bool
+            flag to initialize global localization or not
         """
 
         # publish initialpose for amcl
