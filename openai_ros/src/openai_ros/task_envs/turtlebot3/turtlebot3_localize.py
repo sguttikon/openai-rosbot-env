@@ -107,6 +107,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                                            self._amcl_pose.pose.covariance,
                                            self._amcl_confidence_plt, 'green')
 
+            self._plt_ax.legend([ self._gt_pose_plt, self._amcl_pose_plt ], \
+                                [ 'gt_pose', 'amcl_pose' ])
         plt.draw()
         plt.pause(0.00000000001)
 
