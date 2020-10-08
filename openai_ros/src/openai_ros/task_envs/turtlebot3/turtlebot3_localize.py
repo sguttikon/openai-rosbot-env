@@ -110,6 +110,16 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         plt.draw()
         plt.pause(0.00000000001)
 
+    def close(self):
+        """
+        Override turtlebot3 environment close() with custom logic
+        """
+        super(TurtleBot3LocalizeEnv, self).close()
+
+        # prevent plot from closing after environment is closed
+        plt.ioff()
+        plt.show()
+
     def _draw_map(self, map):
         """
         Draw environment map
