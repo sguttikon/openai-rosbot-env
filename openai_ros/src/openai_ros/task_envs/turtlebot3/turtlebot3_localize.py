@@ -5,10 +5,33 @@ from openai_ros.robot_envs import turtlebot3_env
 from gym import spaces
 from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped
 from std_srvs.srv import Empty
-from tf.transformations import quaternion_from_euler
+from nav_msgs.srv import GetMap
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import dynamic_reconfigure.client as dynamic_reconfig
 
+import matplotlib.pyplot as plt
+from matplotlib.patches import Wedge
 import numpy as np
+
+class Map():
+    """
+        Map class is an implementation to store map details
+    """
+
+    def __init__(self):
+        """
+        Initialize Map class
+        """
+        super(Map, self).__init__()
+
+        self.origin_x = 0.0
+        self.origin_y = 0.0
+        self.scale = 0.0
+
+        self.size_x = 0
+        self.size_y = 0
+
+        self.grid_cells = None
 
 class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
     """
@@ -25,6 +48,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         super(TurtleBot3LocalizeEnv, self).__init__()
 
+        # code related to motion commands
         self._motion_error = 0.05
         self._update_rate = 30
         self._init_linear_speed = 0.0
@@ -33,11 +57,123 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._linear_turn_speed = 0.05
         self._angular_speed = 0.3
 
+        self._is_new_map = False
+
+        # code realted to sensors
+        self._request_map = True
+        self._request_laser = True
+        self._request_odom = True
+        self._request_imu = False
+        self._request_amcl = True
+        self._request_gazebo_data = True
+
+        # code related to displaying results in matplotlib
+        fig = plt.figure(figsize=(6, 6))
+        self._plt_ax = fig.add_subplot(111)
+        plt.ion()
+        plt.show()
+        self._map_plt = None
+        self._gt_pose_plt = None
+        self._gt_heading_plt = None
+        self._amcl_pose_plt = None
+        self._amcl_heading_plt = None
+
         rospy.loginfo('status: TurtleBot3LocalizeEnv is ready')
+
+    def render(self, mode='human'):
+        if self._map_data is not None:
+            # environment map
+            self._draw_map(self._map_data)
+            # groundtruth pose
+            self._gt_pose_plt, self._gt_heading_plt = \
+                self._draw_robot_pose(self._gazebo_pose,
+                                      self._gt_pose_plt,
+                                      self._gt_heading_plt, 'b')
+            # amcl pose
+            self._amcl_pose_plt, self._amcl_heading_plt = \
+                self._draw_robot_pose(self._amcl_pose.pose.pose,
+                                      self._amcl_pose_plt,
+                                      self._amcl_heading_plt, 'g')
+
+        plt.draw()
+        plt.pause(0.00000000001)
+
+    def _draw_map(self, map):
+        """
+        Draw map
+
+        Parameters
+        ----------
+        map: Map
+            map of environment
+        """
+
+        if self._is_new_map:
+            x_max = map.size_x/2 -1/(map.scale*2)
+            x_min = -x_max
+            y_max = map.size_y/2 -1/(map.scale*2)
+            y_min = -y_max
+            extent = [x_min, x_max, y_min, y_max]
+            if self._map_plt == None:
+                self._map_plt = self._plt_ax.imshow(map.grid_cells,
+                            cmap=plt.cm.binary, origin='lower', extent=extent)
+
+                self._plt_ax.grid()
+                self._plt_ax.set_xlim([x_min, x_max])
+                self._plt_ax.set_ylim([y_min, y_max])
+
+                ticks_x = np.linspace(x_min, x_max)
+                ticks_y = np.linspace(y_min, y_max)
+                self._plt_ax.set_xticks(ticks_x, ' ')
+                self._plt_ax.set_yticks(ticks_y, ' ')
+
+                self._plt_ax.set_xlabel('x coords')
+                self._plt_ax.set_ylabel('y coords')
+            else:
+                pass
+
+            self._is_new_map = False
+
+    def _draw_robot_pose(self, robot_pose, pose_plt, heading_plt, color: str):
+        """
+        Draw robot pose
+
+        Parameters
+        ----------
+        robot_pose: geometry_msgs.msg._Pose.Pose
+            robot's pose
+        """
+        if robot_pose is None:
+            return
+
+        # rescale robot position
+        pose_x = robot_pose.position.x / self._map_data.scale
+        pose_y = robot_pose.position.y / self._map_data.scale
+        pose_z = robot_pose.position.z / self._map_data.scale
+        roll, pitch, yaw = euler_from_quaternion([
+                            robot_pose.orientation.x,
+                            robot_pose.orientation.y,
+                            robot_pose.orientation.z,
+                            robot_pose.orientation.w
+        ])
+
+        radius = 3
+        xdata = [pose_x, pose_x + radius*3*np.cos(yaw)]
+        ydata = [pose_y, pose_y + radius*3*np.sin(yaw)]
+
+        if pose_plt == None:
+            pose_plt = Wedge((pose_x, pose_y), radius, 0, 360, color=color, alpha=0.5)
+            heading_plt, = self._plt_ax.plot(xdata, ydata, color=color, alpha=0.5)
+            self._plt_ax.add_artist(pose_plt)
+        else:
+            pose_plt.update({'center': [pose_x, pose_y]})
+            heading_plt.update({'xdata': xdata, 'ydata': ydata})
+
+        return pose_plt, heading_plt
 
     def _check_amcl_data_is_ready(self):
         """
-        Checks amcl is operational
+        Checks amcl topic is operational
 
         Returns
         -------
@@ -55,9 +191,35 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
     def _check_init_pose_pub_ready(self):
         """
-        Checks initial pose is operational
+        Checks initial pose publisher is operational
         """
         self._check_publisher_is_ready(self._init_pose_pub)
+
+    def _check_map_data_is_ready(self):
+        """
+        Checks map service is operational
+        """
+
+        service_name = '/static_map'
+        service_class = GetMap
+        msg = self._call_service(service_name, service_class)
+
+        # initialize map
+        map = Map()
+        map.scale = msg.map.info.resolution
+        map.size_x = msg.map.info.width
+        map.size_y = msg.map.info.height
+
+        # rescale the map origin coordinates
+        map.origin_x = msg.map.info.origin.position.x + (map.size_x/2) * map.scale
+        map.origin_y = msg.map.info.origin.position.y + (map.size_y/2) * map.scale
+
+        map.grid_cells = np.array(msg.map.data).reshape(map.size_y, map.size_x)
+
+        self._map_data = map
+
+        self._is_new_map = True
+        self._request_map = False
 
     def _init_amcl(self, is_global=True):
         """

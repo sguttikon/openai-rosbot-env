@@ -34,6 +34,15 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._particle_cloud = None
         self._amcl_pose = None
         self._gazebo_pose = None
+        self._map_data = None
+
+        # env variables
+        self._request_map = False
+        self._request_laser = True
+        self._request_odom = True
+        self._request_imu = False
+        self._request_amcl = False
+        self._request_gazebo_data = False
 
         # setup subscribers and publishers
         self.gazebo.unpause_sim()
@@ -97,8 +106,14 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
 
         self._check_all_sensors_are_ready()
-        self._check_amcl_data_is_ready()
-        self._check_gazebo_data_is_ready()
+
+        if self._request_map:
+            self._check_map_data_is_ready()
+        if self._request_amcl:
+            self._check_amcl_data_is_ready()
+        if self._request_gazebo_data:
+            self._check_gazebo_data_is_ready()
+
 
     def _check_publishers_connection(self):
         """
@@ -109,14 +124,19 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
     def _check_cmd_vel_pub_ready(self):
         """
-        Checks command velocity is operational
+        Checks command velocity publisher is operational
         """
         self._check_publisher_is_ready(self._cmd_vel_pub)
 
+    def _check_map_data_is_ready(self):
+        """
+        Checks map service is operational
+        """
+        pass
 
     def _check_init_pose_pub_ready(self):
     	"""
-    	Checks initial pose is operational
+    	Checks initial pose publisher is operational
     	"""
     	pass
 
@@ -125,19 +145,22 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Checks all sensors are operational
         """
 
-        self._check_laser_scan_is_ready()
-        self._check_imu_data_is_ready()
-        self._check_odom_data_is_ready()
+        if self._request_laser:
+            self._check_laser_scan_is_ready()
+        if self._request_imu:
+            self._check_imu_data_is_ready()
+        if self._request_odom:
+            self._check_odom_data_is_ready()
 
     def _check_amcl_data_is_ready(self):
         """
-        Checks amcl is operational
+        Checks amcl topic is operational
         """
         pass
 
     def _check_gazebo_data_is_ready(self):
         """
-        Checks gazebo is operational
+        Checks gazebo topic is operational
 
         Returns
         -------
@@ -157,7 +180,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
     def _check_laser_scan_is_ready(self):
         """
-        Checks laser scanner is operational
+        Checks laser scan topic is operational
 
         Returns
         -------
@@ -173,7 +196,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
     def _check_imu_data_is_ready(self):
         """
-        Checks imu is operational
+        Checks imu topic is operational
 
         Returns
         -------
@@ -189,7 +212,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
     def _check_odom_data_is_ready(self):
         """
-        Checks odom is operational
+        Checks odom topic is operational
 
         Returns
         -------
@@ -221,24 +244,23 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         Returns
         -------
-        sensor_data: rospy.Message
-            Message
-
+        response: rospy.Message
+            message received from topic
         """
 
         # TODO: do we need to add max retry limit ??
 
-        sensor_data = None
-        # loop until the ros is shutdown or service call is successful
-        while sensor_data is None and not rospy.is_shutdown():
+        response = None
+        # loop until the ros is shutdown or received successfully message from topic
+        while response is None and not rospy.is_shutdown():
             try:
                 # create a new subscription to topic, receive one message and then unsubscribe
-                sensor_data = rospy.wait_for_message(topic_name, topic_class, timeout = time_out)
+                response = rospy.wait_for_message(topic_name, topic_class, timeout = time_out)
             except rospy.ROSException as e:
                 # do nothing
                 pass
 
-        return sensor_data
+        return response
 
     def _check_publisher_is_ready(self, publisher):
         """
@@ -274,6 +296,10 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         max_retry: int
             maximum number of times to retry calling the service
 
+        Returns
+        -------
+        response:
+            response received from service call
         """
 
         # wait until the service becomes available
@@ -284,13 +310,14 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         is_call_successful = False
         counter = 0
 
+        response = None
         # loop until the counter reached max retry limit or
         # until the ros is shutdown or service call is successful
         while not is_call_successful and not rospy.is_shutdown():
             if counter < max_retry:
                 try:
                     # call service
-                    service_proxy()
+                    response = service_proxy()
                     is_call_successful = True
                 except rospy.ServiceException as e:
                     # service call failed increment the counter
@@ -299,6 +326,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
                 # max retry count reached
                 rospy.logerr('call to the service %s failed', service_name)
                 break
+        return response
 
     def _laser_scan_callback(self, data):
         """
