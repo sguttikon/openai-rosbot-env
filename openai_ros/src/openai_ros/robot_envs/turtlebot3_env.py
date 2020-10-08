@@ -399,7 +399,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._check_cmd_vel_pub_ready()
         self._cmd_vel_pub.publish(cmd_vel_msg)
 
-    def _wait_until_twist_achieved(self, cmd_vel_msg: Twist, motion_error: float, update_rate: float):
+    def _wait_until_twist_achieved(self, cmd_vel_msg: Twist, motion_error: float, update_rate: float, time_out: float = 3.0):
         """
         Wait for the robot to achieve given cmd_vel, by referencing the odometry velocity readings
 
@@ -411,10 +411,12 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             acceptable deviation from the given speed and odometry readings
         update_rate: float
             rate at which we check the odometry
+        time_out: float
+            timeout in seconds
 
         Returns
         -------
-        delta: float
+        duration: float
             time taken to achieve required twist (in seconds)
         """
 
@@ -426,14 +428,14 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         rate = rospy.Rate(update_rate)
         start_time = rospy.get_rostime().to_sec()
-        end_time = 0.0
+        duration = 0.0
 
         # loop until the twist is achieved
         while not rospy.is_shutdown():
             current_odom = self._check_odom_data_is_ready()
             if current_odom is None:
                 # odom data not available
-                end_time = rospy.get_rostime().to_sec()
+                duration = rospy.get_rostime().to_sec() - start_time
                 break
 
             odom_linear_vel = current_odom.twist.twist.linear.x
@@ -449,11 +451,14 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
                                     (odom_angular_vel > min_angular_speed)
                                    )
 
+            duration = rospy.get_rostime().to_sec() - start_time
             if is_linear_vel_valid and is_angular_vel_valid:
                 # required twist achieved
-                end_time = rospy.get_rostime().to_sec()
                 break
-            else:
+            elif duration < time_out:
                 # otherwise
                 rate.sleep()
-        return (end_time - start_time)
+            else:
+                rospy.logwarn('motion cannot be achieved')
+                break
+        return duration
