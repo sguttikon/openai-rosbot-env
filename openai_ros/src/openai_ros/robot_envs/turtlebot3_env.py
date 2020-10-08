@@ -175,8 +175,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         # TODO: do we also need twist (velocity) of turtlebot ??
         # preprocess received data
-        turtlebot_idx = data.name.index('turtlebot3')
-        self._gazebo_pose = data.pose[turtlebot_idx]
+        if data is not None:
+            turtlebot_idx = data.name.index('turtlebot3')
+            self._gazebo_pose = data.pose[turtlebot_idx]
 
     def _check_laser_scan_is_ready(self):
         """
@@ -430,6 +431,11 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         # loop until the twist is achieved
         while not rospy.is_shutdown():
             current_odom = self._check_odom_data_is_ready()
+            if current_odom is None:
+                # odom data not available
+                end_time = rospy.get_rostime().to_sec()
+                break
+
             odom_linear_vel = current_odom.twist.twist.linear.x
             odom_angular_vel = current_odom.twist.twist.angular.z
 
