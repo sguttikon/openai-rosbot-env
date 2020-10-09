@@ -4,13 +4,14 @@ import rospy
 from openai_ros.robot_envs import turtlebot3_env
 from openai_ros.utils import Map, Pose
 from gym import spaces
-from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped, PointStamped
 from gazebo_msgs.msg import ModelStates
+from sensor_msgs.msg import LaserScan
 from std_srvs.srv import Empty
 from nav_msgs.srv import GetMap
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import dynamic_reconfigure.client as dynamic_reconfig
-
+import tf
 import matplotlib.pyplot as plt
 from matplotlib.patches import Wedge
 from matplotlib.patches import Ellipse
@@ -50,6 +51,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._current_step = 0
         # all sensor data, topic messages is assumed to be in same tf frame
         self._global_frame_id = 'map'
+        self._scan_frame_id = 'base_scan'
 
         # code realted to sensors
         self._request_map = True
@@ -70,6 +72,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._amcl_pose_plt = None
         self._amcl_heading_plt = None
         self._amcl_confidence_plt = None
+        self._scan_plt = None
 
         rospy.loginfo('status: TurtleBot3LocalizeEnv is ready')
 
@@ -96,8 +99,11 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 self.__draw_pose_confidence(self._amcl_pose,
                                             self._amcl_confidence_plt, 'green')
 
-            self._plt_ax.legend([ self._gt_pose_plt, self._amcl_pose_plt ], \
-                                [ 'gt_pose', 'amcl_pose' ])
+            self._scan_plt = \
+                self.__draw_laser_scan(self._laser_scan, self._scan_plt, 'C0')
+
+            self._plt_ax.legend([ self._gt_pose_plt, self._amcl_pose_plt, self._scan_plt ], \
+                                [ 'gt_pose', 'amcl_pose', 'laser_scan' ])
         plt.draw()
         plt.pause(0.00000000001)
 
@@ -157,6 +163,25 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 self._gazebo_pose = self.__process_pose_msg(data.pose[turtlebot_idx])
             else:
                 rospy.logwarn('cannot retrieve ground truth pose')
+
+    def _laser_scan_callback(self, data):
+        """
+        Override turtlebot3 environment _laser_scan_callback() with custom logic
+        """
+        pass
+
+    def _check_laser_scan_is_ready(self):
+        """
+        Override turtlebot3 environment _check_laser_scan_is_ready() with custom logic
+        """
+
+        topic_name = '/scan'
+        topic_class = LaserScan
+        time_out = 1.0
+        data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+
+        if data is not None:
+            self._laser_scan = self.__process_laser_msg(data)
 
     def _check_init_pose_pub_ready(self):
         """
@@ -277,7 +302,6 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                      self._amcl_pose.get_entropy() < self._ent_threshold )
             ):
             self._episode_done = True
-        print(self._amcl_pose.get_estimate_error(), self._amcl_pose.get_entropy())
 
         return self._episode_done
 
@@ -448,6 +472,24 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         return confidence_plt
 
+    def __draw_laser_scan(self, laser_scan, scan_plt, color: str):
+        """
+        Draw laser scan data in the environment
+
+        :param numpy.ndarray laser_scan: laser scan data
+               matplotlib.collections.PathCollection scan_plt: plot of laser scan
+        """
+
+        scale = self._map_data.get_scale()
+        xdata = laser_scan[:, 0]/scale
+        ydata = laser_scan[:, 1]/scale
+        if scan_plt == None:
+            scan_plt = plt.scatter(xdata, ydata, s=14, c=color)
+        else:
+            scan_plt.set_offsets(laser_scan/scale)
+
+        return scan_plt
+
     def __process_particle_msg(self, particle_msg):
         """
         Process the particle cloud message
@@ -539,8 +581,59 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         return map
 
+    def __process_laser_msg(self, scan_msg):
+        """
+        Process the received laser scane message
+
+        :param sensor_msgs.msg._LaserScan.LaserScan scan_msg: laser scan message
+        :return numpy.ndarray
+        """
+
+        scan_points = []
+        # transform from _scan_frame_id to _global_frame_id
+        if scan_msg.header.frame_id == self._scan_frame_id:
+            # check whether transform is available
+            tf_listener = tf.TransformListener()
+            now = rospy.Time(0)
+            try:
+                tf_listener.waitForTransform(self._scan_frame_id,
+                                             self._global_frame_id,
+                                             now,
+                                             rospy.Duration(1.0))
+            except Exception as e:
+                rospy.logwarn('cannot transform from {0} to {1}'.format(self._scan_frame_id, self._global_frame_id))
+                return []
+
+            # transform available laser scan point to map frame point
+            for idx in range(len(scan_msg.ranges)):
+                lrange = scan_msg.ranges[idx]
+                if np.isinf(lrange):
+                    continue
+
+                langle = scan_msg.angle_min + ( idx * scan_msg.angle_increment )
+
+                scan_point = PointStamped()
+                scan_point.header.frame_id = self._scan_frame_id
+                scan_point.header.stamp = now
+                scan_point.point.x = lrange * np.cos(langle)
+                scan_point.point.y = lrange * np.sin(langle)
+                scan_point.point.z = 0.0
+
+                map_point = tf_listener.transformPoint(self._global_frame_id, scan_point)
+                x = map_point.point.x
+                y = map_point.point.y
+
+                if np.isnan(x) or np.isinf(x) or np.isnan(y) or np.isinf(y):
+                    continue
+                else:
+                    scan_points.append([x, y])
+
+        scan_points = np.asarray(scan_points)
+        return scan_points
+
     def __estimate_pose_error(self, pose1, pose2):
         """
+        Calculate the squared euclidean distance between two pose + covariance
 
         :param utils.Pose pose1:
                utils.Pose pose2:

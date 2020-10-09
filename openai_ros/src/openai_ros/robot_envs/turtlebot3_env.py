@@ -35,6 +35,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._gazebo_pose = None
         self._map_data = None
 
+        self._global_frame_id = None
+        self._scan_frame_id = None
+
         # env variables
         self._request_map = False
         self._request_laser = True
