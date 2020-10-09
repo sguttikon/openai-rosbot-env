@@ -313,18 +313,19 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if self._is_new_map:
             width, height = map.get_size()
             scale = map.get_scale()
+            orign_x, orign_y, _ = map.get_origin().get_position()
 
-            # offset the limit the range of plot to display
-            x_max = (width/2) * (1-scale)
-            x_min = -(width/2) * (1+scale)
-            y_max = (height/2) * (1-scale)
-            y_min = -(height/2) * (1+scale)
+            # offset the map to display correctly w.r.t origin
+            x_max = width/2 + orign_x/scale
+            x_min = -width/2 + orign_x/scale
+            y_max = height/2 + orign_y/scale
+            y_min = -height/2 + orign_y/scale
             extent = [x_min, x_max, y_min, y_max]
 
             if self._map_plt == None:
                 self._map_plt = self._plt_ax.imshow(map.get_cells(),
                             cmap=plt.cm.binary, origin='lower', extent=extent)
-
+                self._plt_ax.plot(orign_x, orign_y, 'm+', markersize=14)
                 self._plt_ax.grid()
                 self._plt_ax.set_xlim([x_min, x_max])
                 self._plt_ax.set_ylim([y_min, y_max])
