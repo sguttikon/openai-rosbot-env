@@ -40,9 +40,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._linear_forward_speed = 0.5
         self._linear_turn_speed = 0.05
         self._angular_speed = 0.3
+        self._max_steps = 50
+        self._dist_threshold = 0.1
+        self._ent_threshold = -1.5
 
         self._is_new_map = False
         self._robot_radius = 3.0
+        self._episode_done = False
+        self._current_step = 0
         # all sensor data, topic messages is assumed to be in same tf frame
         self._global_frame_id = 'map'
 
@@ -116,20 +121,22 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         time_out = 5.0
         particle_msg = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
 
-        if particle_msg.header.frame_id != self._global_frame_id:
-            rospy.logwarn('received amcl particle cloud must be in the global frame')
+        if particle_msg is not None:
+            if particle_msg.header.frame_id != self._global_frame_id:
+                rospy.logwarn('received amcl particle cloud must be in the global frame')
 
-        self._particle_cloud = self.__process_particle_msg(particle_msg.poses)
+            self._particle_cloud = self.__process_particle_msg(particle_msg.poses)
 
         topic_name = '/amcl_pose'
         topic_class = PoseWithCovarianceStamped
         time_out = 1.0
         pose_msg = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
 
-        if pose_msg.header.frame_id != self._global_frame_id:
-            rospy.logwarn('received amcl pose must be in the global frame')
+        if pose_msg is not None:
+            if pose_msg.header.frame_id != self._global_frame_id:
+                rospy.logwarn('received amcl pose must be in the global frame')
 
-        self._amcl_pose = self.__process_pose_cov_msg(pose_msg.pose)
+            self._amcl_pose = self.__process_pose_cov_msg(pose_msg.pose)
 
     def _check_gazebo_data_is_ready(self):
         """
@@ -243,13 +250,18 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Initialize environment variables
         """
-        pass
+        self._episode_done = False
+        self._current_step = 0
 
     def _get_obs(self):
         """
         Return the observation from the environment
         """
-        self.__estimate_pose_error(self._amcl_pose, self._amcl_pose)
+        sqr_dist_err = self.__estimate_pose_error(self._gazebo_pose, self._amcl_pose)
+        self._amcl_pose.set_estimate_error(sqr_dist_err)
+
+        return self._particle_cloud
+
 
     def _is_done(self):
         """
@@ -257,8 +269,17 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
-        # TODO
-        pass
+        # done if within distance threshold range with smallest entropy
+        # or max steps elapsed
+        if self._current_step > self._max_steps or \
+            ( self._amcl_pose.get_estimate_error() < self._dist_threshold and \
+                 ( np.isinf(self._amcl_pose.get_entropy()) or \
+                     self._amcl_pose.get_entropy() < self._ent_threshold )
+            ):
+            self._episode_done = True
+        print(self._amcl_pose.get_estimate_error(), self._amcl_pose.get_entropy())
+
+        return self._episode_done
 
     def _compute_reward(self, observation, done):
         """
@@ -266,8 +287,12 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
-        # TODO
-        return 0
+        # to avoid division by zero
+        #   sqr_error: error is always positive best value 0.0
+        #   entropy: assuming 10e^-9 precision best value -5.0
+        reward = 1/(self._amcl_pose.get_estimate_error() - self._dist_threshold + 1) + \
+                 1/(self._amcl_pose.get_entropy() - self._ent_threshold + 5)
+        return reward
 
     def _set_action(self, action: int):
         """
@@ -284,6 +309,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         * 2 = TurnRight
 
         """
+
+        # increment step counter
+        self._current_step += 1
 
         if action == 0:     # move forward
             linear_speed = self._linear_forward_speed
@@ -425,10 +453,18 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Process the particle cloud message
 
         :param list[geometry_msgs.msg._Pose.Pose] particle_msg: list of poses
-        :return
+        :return numpy.ndarray
         """
 
-        return particle_msg
+        poses = []
+        for pose_msg in particle_msg:
+            pose = self.__process_pose_msg(pose_msg)
+            x, y, _ = pose.get_position()
+            _, _, yaw = pose.get_euler()
+            poses.append([x, y, yaw])
+
+        poses = np.asarray(poses)
+        return poses
 
     def __process_pose_cov_msg(self, pose_cov_msg):
         """
@@ -503,19 +539,18 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         return map
 
-    def __estimate_pose_error(self, gt_pose, amcl_pose):
+    def __estimate_pose_error(self, pose1, pose2):
         """
 
-        :param utils.Pose gt_pose: ground truth (Gazebo) pose
-               utils.Pose amcl_pose: amcl estimates pose
+        :param utils.Pose pose1:
+               utils.Pose pose2:
         :return float
         """
 
         # calculate squared euclidean in pose+covariance
-        sqr_dist_err = np.linalg.norm( gt_pose.get_position() - amcl_pose.get_position() )**2 + \
-               np.linalg.norm( gt_pose.get_euler() - amcl_pose.get_euler() )**2 + \
-               np.linalg.norm( gt_pose.get_covariance() - amcl_pose.get_covariance() )**2
-        amcl_pose.set_estimate_error(sqr_dist_err)
+        sqr_dist_err = np.linalg.norm( pose1.get_position() - pose2.get_position() )**2 + \
+               np.linalg.norm( pose1.get_euler() - pose2.get_euler() )**2 + \
+               np.linalg.norm( pose1.get_covariance() - pose2.get_covariance() )**2
 
         return sqr_dist_err
 
