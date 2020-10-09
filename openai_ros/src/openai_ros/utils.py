@@ -112,6 +112,8 @@ class Pose():
         self.__quaternion = np.zeros(4)
 
         self.__covariance = np.zeros((6, 6))
+        self.__entropy = 0.0
+        self.__error = 0.0
 
     def set_position(self, x: float, y: float, z:float):
         """
@@ -129,9 +131,9 @@ class Pose():
         """
         Gets the 3D position
 
-        :return float, float, float
+        :return numpy.ndarray
         """
-        return self.__position[0], self.__position[1], self.__position[2]
+        return self.__position
 
     def set_quaternion(self, x: float, y: float, z: float, w: float):
         """
@@ -154,9 +156,9 @@ class Pose():
         """
         Gets the quaternion angle
 
-        :return float, float, float, float
+        :return numpy.ndarray
         """
-        return self.__quaternion[0], self.__quaternion[1], self.__quaternion[2], self.__quaternion[3]
+        return self.__quaternion
 
     def __set_euler(self, roll: float, pitch: float, yaw: float):
         """
@@ -174,9 +176,9 @@ class Pose():
         """
         Gets the euler angle
 
-        :return float, float, float
+        :return numpy.ndarray
         """
-        return self.__euler[0], self.__euler[1], self.__euler[2]
+        return self.__euler
 
     def set_covariance(self, covariance):
         """
@@ -185,6 +187,7 @@ class Pose():
         :param tuple covariance: pose covariance
         """
         self.__covariance = np.array(covariance).reshape((6, 6))
+        self.__calculate_entropy()
 
     def get_covariance(self):
         """
@@ -193,6 +196,47 @@ class Pose():
         :return numpy.ndarray
         """
         return self.__covariance
+
+    def __calculate_entropy(self):
+        """
+        calculate entropy based on the pose covariance
+        """
+
+        mean = np.array([self.__position[0], self.__position[1], self.__euler[2]])
+        cov = np.array([
+            [self.__covariance[0,0], self.__covariance[0,1], self.__covariance[0,5]],
+            [self.__covariance[1,0], self.__covariance[1,1], self.__covariance[1,5]],
+            [self.__covariance[5,0], self.__covariance[5,2], self.__covariance[5,5]]
+        ])
+
+        # reference https://en.wikipedia.org/wiki/Multivariate_normal_distribution
+        entropy = 0.5 * np.log(np.linalg.det(2 * np.pi * np.e * cov))
+
+        # TODO: do we need to fix this?
+        # for singular matrix, entropy value is infinity
+        self.__entropy = entropy
+
+    def get_entropy(self):
+        """
+        Gets the pose entropy
+
+        :return float
+        """
+        return self.__entropy
+
+    def set_estimate_error(self, error):
+        """
+        Sets the squared euclidean error in pose estimate
+
+        :param floag error: squared euclidean error
+        """
+        self.__error = error
+
+    def get_estimate_error(self):
+        """
+        Gets the squared euclidean error in pose estimate
+        """
+        return self.__error
 
     def __str__(self):
         """

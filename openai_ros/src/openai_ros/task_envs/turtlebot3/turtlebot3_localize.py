@@ -119,7 +119,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if particle_msg.header.frame_id != self._global_frame_id:
             rospy.logwarn('received amcl particle cloud must be in the global frame')
 
-        self._particle_cloud = self.__process_particle_msg(particle_msg)
+        self._particle_cloud = self.__process_particle_msg(particle_msg.poses)
 
         topic_name = '/amcl_pose'
         topic_class = PoseWithCovarianceStamped
@@ -211,10 +211,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             # dynamic reconfigure
             particles = 20000
             client = dynamic_reconfig.Client('/amcl')
-            params = {
+            config_params = {
                         'max_particles' : particles,
                      }
-            config = client.update_configuration(params)
+            config = client.update_configuration(config_params)
 
             self._init_global_localization()
 
@@ -249,7 +249,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Return the observation from the environment
         """
-        pass
+        self.__estimate_pose_error(self._amcl_pose, self._amcl_pose)
 
     def _is_done(self):
         """
@@ -307,7 +307,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Draw environment map
 
-        :params utils.Map map: map of robot's environment
+        :param utils.Map map: map of robot's environment
         """
 
         if self._is_new_map:
@@ -346,7 +346,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Draw robot pose
 
-        :params utils.Pose robot_pose: robot's pose
+        :param utils.Pose robot_pose: robot's pose
                 matplotlib.patches.Wedge pose_plt: plot of robot position
                 matplotlib.lines.Line2D heading_plt: plot of robot heading
                 str color: color used to render robot position and heading
@@ -380,7 +380,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Draw confidence ellipse around the robot pose
 
-        :params utils.Pose robot_pose: robot's pose
+        :param utils.Pose robot_pose: robot's pose
                 matplotlib.patches.Wedge confidence_plt: plot of robot position confidence
                 str color: color used to render robot position confidence
                 float n_std: number of std to determine ellipse's radius
@@ -424,7 +424,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Process the particle cloud message
 
-        :param
+        :param list[geometry_msgs.msg._Pose.Pose] particle_msg: list of poses
         :return
         """
 
@@ -502,5 +502,21 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._request_map = False
 
         return map
+
+    def __estimate_pose_error(self, gt_pose, amcl_pose):
+        """
+
+        :param utils.Pose gt_pose: ground truth (Gazebo) pose
+               utils.Pose amcl_pose: amcl estimates pose
+        :return float
+        """
+
+        # calculate squared euclidean in pose+covariance
+        sqr_dist_err = np.linalg.norm( gt_pose.get_position() - amcl_pose.get_position() )**2 + \
+               np.linalg.norm( gt_pose.get_euler() - amcl_pose.get_euler() )**2 + \
+               np.linalg.norm( gt_pose.get_covariance() - amcl_pose.get_covariance() )**2
+        amcl_pose.set_estimate_error(sqr_dist_err)
+
+        return sqr_dist_err
 
     ###### private methods ######
