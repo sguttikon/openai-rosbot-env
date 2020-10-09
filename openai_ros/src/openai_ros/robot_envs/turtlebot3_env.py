@@ -5,7 +5,6 @@ from openai_ros import rosbot_gazebo_env
 from sensor_msgs.msg import LaserScan, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
-from gazebo_msgs.msg import ModelStates
 
 class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
     """
@@ -161,23 +160,8 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
     def _check_gazebo_data_is_ready(self):
         """
         Checks gazebo topic is operational
-
-        Returns
-        -------
-        gazebo_pose: rospy.Message
-            Message
         """
-
-        topic_name = '/gazebo/model_states'
-        topic_class = ModelStates
-        time_out = 1.0
-        data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
-
-        # TODO: do we also need twist (velocity) of turtlebot ??
-        # preprocess received data
-        if data is not None:
-            turtlebot_idx = data.name.index('turtlebot3')
-            self._gazebo_pose = data.pose[turtlebot_idx]
+        pass
 
     def _check_laser_scan_is_ready(self):
         """

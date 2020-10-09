@@ -25,3 +25,4 @@ Gym - [doc](https://gym.openai.com/docs/)
 
 #### Notes:
 * configure #export TURTLEBOT3_MODEL=waffle in .bashrc file
+* assumption is all sensor data, poses, etc are in same frame ie. 'map'
