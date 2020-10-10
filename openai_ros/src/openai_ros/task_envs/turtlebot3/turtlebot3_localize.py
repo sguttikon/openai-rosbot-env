@@ -40,10 +40,11 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._init_angular_speed = 0.0
         self._linear_forward_speed = 0.5
         self._linear_turn_speed = 0.05
-        self._angular_speed = 0.3
+        self._angular_speed = 1.0
         self._max_steps = 50
         self._dist_threshold = 0.1
         self._ent_threshold = -1.5
+        self._collision_threshold = max(self._linear_forward_speed, self._angular_speed) + 0.1
 
         self._is_new_map = False
         self._robot_radius = 3.0
@@ -52,6 +53,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # all sensor data, topic messages is assumed to be in same tf frame
         self._global_frame_id = 'map'
         self._scan_frame_id = 'base_scan'
+        self._sector_angle = 30 # 120 degrees field view
+        self._collision = np.zeros(360//self._sector_angle, dtype=int)
+        self._is_collision = False
 
         # code realted to sensors
         self._request_map = True
@@ -68,8 +72,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         plt.show()
         self._map_plt = None
         self._gt_pose_plt = None
+        self._gt_view_plt = None
         self._gt_heading_plt = None
         self._amcl_pose_plt = None
+        self._amcl_view_plt = None
         self._amcl_heading_plt = None
         self._amcl_confidence_plt = None
         self._scan_plt = None
@@ -85,14 +91,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             # environment map
             self.__draw_map(self._map_data)
             # groundtruth pose
-            self._gt_pose_plt, self._gt_heading_plt = \
+            self._gt_pose_plt, self._gt_view_plt, self._gt_heading_plt = \
                 self.__draw_robot_pose(self._gazebo_pose,
-                                      self._gt_pose_plt,
+                                      self._gt_pose_plt, self._gt_view_plt,
                                       self._gt_heading_plt, 'blue')
             # amcl pose
-            self._amcl_pose_plt, self._amcl_heading_plt = \
+            self._amcl_pose_plt, self._amcl_view_plt, self._amcl_heading_plt = \
                 self.__draw_robot_pose(self._amcl_pose,
-                                      self._amcl_pose_plt,
+                                      self._amcl_pose_plt, self._amcl_view_plt,
                                       self._amcl_heading_plt, 'green')
             # amcl pose covariance
             self._amcl_confidence_plt = \
@@ -311,11 +317,15 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
-        # to avoid division by zero
-        #   sqr_error: error is always positive best value 0.0
-        #   entropy: assuming 10e^-9 precision best value -5.0
-        reward = 1/(self._amcl_pose.get_estimate_error() - self._dist_threshold + 1) + \
-                 1/(self._amcl_pose.get_entropy() - self._ent_threshold + 5)
+        if self._is_collision:
+            reward = -10.0
+        else:
+            # to avoid division by zero
+            #   sqr_error: error is always positive best value 0.0
+            #   entropy: assuming 10e^-9 precision best value -5.0
+            reward = 1/(self._amcl_pose.get_estimate_error() - self._dist_threshold + 1) + \
+                    1/(self._amcl_pose.get_entropy() - self._ent_threshold + 5)
+
         return reward
 
     def _set_action(self, action: int):
@@ -336,10 +346,19 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # increment step counter
         self._current_step += 1
-
+        self._is_collision = False
+        indices = np.where(self._collision == 1)[0]
+        rospy.loginfo('{0}, {1}'.format(action, self._collision))
         if action == 0:     # move forward
-            linear_speed = self._linear_forward_speed
-            angular_speed = 0.0
+            if ( (1 not in indices) and (2 not in indices) and \
+                (3 not in indices) and (4 not in indices) ):
+                linear_speed = self._linear_forward_speed
+                angular_speed = 0.0
+            else:
+                rospy.logwarn('cannot execute action: 0, obstacle in path')
+                self._is_collision = True
+                linear_speed = 0.0
+                angular_speed = 0.0
         elif action == 1:   # turn left
             linear_speed = self._linear_turn_speed
             angular_speed = self._angular_speed
@@ -394,7 +413,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
             self._is_new_map = False
 
-    def __draw_robot_pose(self, robot_pose, pose_plt: Wedge, heading_plt, color: str):
+    def __draw_robot_pose(self, robot_pose, pose_plt: Wedge, collision_plt: Wedge, heading_plt, color: str):
         """
         Draw robot pose
 
@@ -409,9 +428,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             return
 
         # rescale robot position
+        scale = self._map_data.get_scale()
         pose_x, pose_y, _ = robot_pose.get_position()
-        pose_x = pose_x / self._map_data.get_scale()
-        pose_y = pose_y / self._map_data.get_scale()
+        pose_x = pose_x / scale
+        pose_y = pose_y / scale
         _, _, yaw = robot_pose.get_euler()
 
         line_len = 3.0
@@ -420,13 +440,19 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         if pose_plt == None:
             pose_plt = Wedge((pose_x, pose_y), self._robot_radius, 0, 360, color=color, alpha=0.5)
+            collision_plt = Wedge((pose_x + 0.064/scale, pose_y), self._collision_threshold/scale,
+                np.degrees(yaw) + self._sector_angle - 90,
+                np.degrees(yaw) - self._sector_angle + 90,
+                color='silver', alpha=0.5)
             heading_plt, = self._plt_ax.plot(xdata, ydata, color=color, alpha=0.5)
             self._plt_ax.add_artist(pose_plt)
+            self._plt_ax.add_artist(collision_plt)
         else:
             pose_plt.update({'center': [pose_x, pose_y]})
+            collision_plt.update({'center': [pose_x + 0.064/scale, pose_y]})
             heading_plt.update({'xdata': xdata, 'ydata': ydata})
 
-        return pose_plt, heading_plt
+        return pose_plt, collision_plt, heading_plt
 
     def __draw_pose_confidence(self, robot_pose, confidence_plt, color: str, n_std=1.0):
         """
@@ -487,6 +513,29 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             scan_plt = plt.scatter(xdata, ydata, s=14, c=color)
         else:
             scan_plt.set_offsets(laser_scan/scale)
+
+        # scale = self._map_data.get_scale()
+        # #plt.scatter(laser_scan[:, 0]/scale, laser_scan[:, 1]/scale, s=14, c='red')
+        # diff_x, diff_y, _ = self._gazebo_pose.get_position() - self._amcl_pose.get_position()
+        # _, _, diff_a = self._gazebo_pose.get_euler() - self._amcl_pose.get_euler()
+        #
+        # diff_a = np.arctan2(np.sin(diff_a), np.cos(diff_a))
+        # r = np.array([
+        #     [np.cos(diff_a), -np.sin(diff_a)],
+        #     [np.sin(diff_a), np.cos(diff_a)]
+        # ])
+        # t = np.array([diff_x, diff_y])
+        # scan = []
+        # for idx in range(len(laser_scan)):
+        #     #x, y = np.matmul(r.T, laser_scan[idx])/scale - np.matmul(r.T, t)/scale
+        #     x, y = np.matmul(r, laser_scan[idx])/scale + t/scale
+        #     scan.append([x, y])
+        # laser_scan = np.asarray(scan)
+        #
+        # if scan_plt == None:
+        #     scan_plt = plt.scatter(laser_scan[:, 0], laser_scan[:, 1], s=14, c=color)
+        # else:
+        #     scan_plt.set_offsets(laser_scan)
 
         return scan_plt
 
@@ -605,10 +654,17 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 return []
 
             # transform available laser scan point to map frame point
+            collision_idx = 0
+            self._collision = np.zeros(360//self._sector_angle, dtype=int)
             for idx in range(len(scan_msg.ranges)):
                 lrange = scan_msg.ranges[idx]
                 if np.isinf(lrange):
                     continue
+
+                if (idx+1)%self._sector_angle == 0:
+                    collision_idx += 1
+                if lrange < self._collision_threshold:
+                    self._collision[collision_idx-1] = 1
 
                 langle = scan_msg.angle_min + ( idx * scan_msg.angle_increment )
 
