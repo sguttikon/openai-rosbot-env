@@ -45,7 +45,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._dist_threshold = 0.1
         self._ent_threshold = -1.5
         self._forward_threshold = 0.6
-        self._side_threhold = 0.4
+        self._side_threshold = 0.4
 
         self._is_new_map = False
         self._robot_radius = 3.0
@@ -360,7 +360,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 rospy.logwarn('cannot execute action: 0, obstacle in path')
                 self._is_collision = True
         elif action == 1:   # turn left
-            indices = np.where(self._collision < self._side_threhold)[0]
+            indices = np.where(self._collision < self._side_threshold)[0]
             if ( (2 not in indices) and (3 not in indices) ):
                 linear_speed = self._linear_turn_speed
                 angular_speed = self._angular_speed
@@ -368,7 +368,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 rospy.logwarn('cannot execute action: 1, obstacle in path')
                 self._is_collision = True
         elif action == 2:   # turn right
-            indices = np.where(self._collision < self._side_threhold)[0]
+            indices = np.where(self._collision < self._side_threshold)[0]
             if ( (8 not in indices) and (9 not in indices) ):
                 linear_speed = self._linear_turn_speed
                 angular_speed = -1 * self._angular_speed
@@ -466,7 +466,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                         theta1_min, theta2_min, color='silver', alpha=0.5)
                 )       # front
                 collision_plts.append(
-                    Wedge((pose_x, pose_y), self._side__threshold/scale,
+                    Wedge((pose_x, pose_y), self._side_threshold/scale,
                         theta2_min, theta2_max, color='silver', alpha=0.5)
                 )       # right
                 for c_plt in collision_plts:
