@@ -40,7 +40,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._init_angular_speed = 0.0
         self._linear_forward_speed = 0.5
         self._linear_turn_speed = 0.05
-        self._angular_speed = 1.0
+        self._angular_speed = 2.0
         self._max_steps = 50
         self._dist_threshold = 0.1
         self._ent_threshold = -1.5
@@ -55,7 +55,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._global_frame_id = 'map'
         self._scan_frame_id = 'base_scan'
         self._sector_angle = 30 # 120 degrees field view
-        self._collision = np.zeros(360//self._sector_angle, dtype=float) # anti-clockwise
+        self._collision = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
         self._is_collision = False
 
         # code realted to sensors
@@ -349,9 +349,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._is_collision = False
         linear_speed = 0.0
         angular_speed = 0.0
-        rospy.loginfo('{0}, {1}'.format(action, self._collision))
         if action == 0:     # move forward
-            indices = np.where(self._collision < self._forward_threshold)[0]
+            indices = [] #np.where(self._collision < self._forward_threshold)[0]
             if ( (0 not in indices) and (1 not in indices) and \
                  (10 not in indices) and (11 not in indices) ):
                 linear_speed = self._linear_forward_speed
@@ -360,7 +359,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 rospy.logwarn('cannot execute action: 0, obstacle in path')
                 self._is_collision = True
         elif action == 1:   # turn left
-            indices = np.where(self._collision < self._side_threshold)[0]
+            indices = [] #np.where(self._collision < self._side_threshold)[0]
             if ( (2 not in indices) and (3 not in indices) ):
                 linear_speed = self._linear_turn_speed
                 angular_speed = self._angular_speed
@@ -368,7 +367,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 rospy.logwarn('cannot execute action: 1, obstacle in path')
                 self._is_collision = True
         elif action == 2:   # turn right
-            indices = np.where(self._collision < self._side_threshold)[0]
+            indices = [] #np.where(self._collision < self._side_threshold)[0]
             if ( (8 not in indices) and (9 not in indices) ):
                 linear_speed = self._linear_turn_speed
                 angular_speed = -1 * self._angular_speed
@@ -542,29 +541,6 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         else:
             scan_plt.set_offsets(laser_scan/scale)
 
-        # scale = self._map_data.get_scale()
-        # #plt.scatter(laser_scan[:, 0]/scale, laser_scan[:, 1]/scale, s=14, c='red')
-        # diff_x, diff_y, _ = self._gazebo_pose.get_position() - self._amcl_pose.get_position()
-        # _, _, diff_a = self._gazebo_pose.get_euler() - self._amcl_pose.get_euler()
-        #
-        # diff_a = np.arctan2(np.sin(diff_a), np.cos(diff_a))
-        # r = np.array([
-        #     [np.cos(diff_a), -np.sin(diff_a)],
-        #     [np.sin(diff_a), np.cos(diff_a)]
-        # ])
-        # t = np.array([diff_x, diff_y])
-        # scan = []
-        # for idx in range(len(laser_scan)):
-        #     #x, y = np.matmul(r.T, laser_scan[idx])/scale - np.matmul(r.T, t)/scale
-        #     x, y = np.matmul(r, laser_scan[idx])/scale + t/scale
-        #     scan.append([x, y])
-        # laser_scan = np.asarray(scan)
-        #
-        # if scan_plt == None:
-        #     scan_plt = plt.scatter(laser_scan[:, 0], laser_scan[:, 1], s=14, c=color)
-        # else:
-        #     scan_plt.set_offsets(laser_scan)
-
         return scan_plt
 
     def __process_particle_msg(self, particle_msg):
@@ -666,49 +642,77 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         :return numpy.ndarray
         """
 
+        transform_scan = False
         scan_points = []
-        # transform from _scan_frame_id to _global_frame_id
         if scan_msg.header.frame_id == self._scan_frame_id:
-            # check whether transform is available
-            tf_listener = tf.TransformListener()
-            now = rospy.Time(0)
-            try:
-                tf_listener.waitForTransform(self._scan_frame_id,
-                                             self._global_frame_id,
-                                             now,
-                                             rospy.Duration(1.0))
-            except Exception as e:
-                rospy.logwarn('cannot transform from {0} to {1}'.format(self._scan_frame_id, self._global_frame_id))
-                return []
+            # transform from _scan_frame_id to _global_frame_id
+            if transform_scan:
+                # show scan w.r.t amcl pose
 
-            # transform available laser scan point to map frame point
-            collision_idx = 0
-            self._collision.fill(np.inf)
-            for idx in range(len(scan_msg.ranges)):
-                lrange = scan_msg.ranges[idx]
-                if np.isinf(lrange):
-                    continue
+                # check whether transform is available
+                tf_listener = tf.TransformListener()
+                now = rospy.Time(0)
+                try:
+                    tf_listener.waitForTransform(self._scan_frame_id,
+                                                 self._global_frame_id,
+                                                 now,
+                                                 rospy.Duration(1.0))
+                except Exception as e:
+                    rospy.logwarn('cannot transform from {0} to {1}'.format(self._scan_frame_id, self._global_frame_id))
+                    return []
 
-                collision_idx = idx//self._sector_angle
-                langle = scan_msg.angle_min + ( idx * scan_msg.angle_increment )
-                if lrange < self._forward_threshold and lrange < self._collision[collision_idx] :
-                    self._collision[collision_idx] = lrange
+                # transform available laser scan point to map frame point
+                collision_idx = 0
+                self._collision[:, ...].fill(np.inf)
+                for idx in range(len(scan_msg.ranges)):
+                    lrange = scan_msg.ranges[idx]
+                    if np.isinf(lrange):
+                        continue
+                    langle = scan_msg.angle_min + ( idx * scan_msg.angle_increment )
+                    scan_point = PointStamped()
+                    scan_point.header.frame_id = self._scan_frame_id
+                    scan_point.header.stamp = now
+                    scan_point.point.x = lrange * np.cos(langle)
+                    scan_point.point.y = lrange * np.sin(langle)
+                    scan_point.point.z = 0.0
 
-                scan_point = PointStamped()
-                scan_point.header.frame_id = self._scan_frame_id
-                scan_point.header.stamp = now
-                scan_point.point.x = lrange * np.cos(langle)
-                scan_point.point.y = lrange * np.sin(langle)
-                scan_point.point.z = 0.0
+                    map_point = tf_listener.transformPoint(self._global_frame_id, scan_point)
+                    x = map_point.point.x
+                    y = map_point.point.y
 
-                map_point = tf_listener.transformPoint(self._global_frame_id, scan_point)
-                x = map_point.point.x
-                y = map_point.point.y
+                    if np.isnan(x) or np.isinf(x) or np.isnan(y) or np.isinf(y):
+                        continue
+                    else:
+                        scan_points.append([x, y])
 
-                if np.isnan(x) or np.isinf(x) or np.isnan(y) or np.isinf(y):
-                    continue
-                else:
+                    # store shortest beam range with angle per sector
+                    collision_idx = idx//self._sector_angle
+                    if lrange < self._collision[collision_idx][0]:
+                        self._collision[collision_idx][0] = lrange
+                        self._collision[collision_idx][0] = langle
+            else:
+                # show scan w.r.t groundtruth pose
+                self._check_gazebo_data_is_ready()  # get latest _gazebo_pose
+                gt_x, gt_y, _ = self._gazebo_pose.get_position()
+                _, _, gt_a = self._gazebo_pose.get_euler()
+
+                collision_idx = 0
+                self._collision[:, ...].fill(np.inf)
+                for idx in range(len(scan_msg.ranges)):
+                    lrange = scan_msg.ranges[idx]
+                    if np.isinf(lrange):
+                        continue
+                    # if beam hits obstacle, store bean endpoint
+                    langle = gt_a + scan_msg.angle_min + ( idx * scan_msg.angle_increment )
+                    x = gt_x + lrange * np.cos(langle)
+                    y = gt_y + lrange * np.sin(langle)
                     scan_points.append([x, y])
+
+                    # store shortest beam range with angle per sector
+                    collision_idx = idx//self._sector_angle
+                    if lrange < self._collision[collision_idx][0]:
+                        self._collision[collision_idx][0] = lrange
+                        self._collision[collision_idx][0] = langle
 
         scan_points = np.asarray(scan_points)
         return scan_points
