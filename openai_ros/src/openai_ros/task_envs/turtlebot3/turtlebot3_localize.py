@@ -40,12 +40,12 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._init_angular_speed = 0.0
         self._linear_forward_speed = 0.5
         self._linear_turn_speed = 0.05
-        self._angular_speed = 2.0
+        self._angular_speed = 1.0
         self._max_steps = 50
         self._dist_threshold = 0.1
         self._ent_threshold = -1.5
-        self._forward_threshold = 0.6
-        self._side_threshold = 0.4
+        self._front_threshold = 0.6
+        self._left_threshold = self._right_threshold = 0.4
 
         self._is_new_map = False
         self._robot_radius = 3.0
@@ -54,8 +54,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # all sensor data, topic messages is assumed to be in same tf frame
         self._global_frame_id = 'map'
         self._scan_frame_id = 'base_scan'
-        self._sector_angle = 30 # 120 degrees field view
-        self._collision = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
+        self._sector_angle = 30 # degrees view
+        self._front_view = 120 # degrees view
+        self._left_view = self._right_view = 60 # degrees view
+        self._collision = np.zeros((360//self._sector_angle, 2), dtype=float)
         self._is_collision = False
 
         # code realted to sensors
@@ -72,12 +74,20 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         plt.ion()
         plt.show()
         self._map_plt = None
-        self._gt_pose_plt = None
-        self._gt_collision_plts = {}
-        self._gt_heading_plt = None
-        self._amcl_pose_plt = None
-        self._amcl_heading_plt = None
-        self._amcl_confidence_plt = None
+        self._gt_pose_plts = {
+            'robot': None,
+            'heading': None,
+            'surroundings': {
+                'front': None,
+                'left': None,
+                'right': None
+            },
+        }
+        self._amcl_pose_plts = {
+            'robot': None,
+            'heading': None,
+            'confidence': None,
+        }
         self._scan_plt = None
 
         rospy.loginfo('status: TurtleBot3LocalizeEnv is ready')
@@ -90,25 +100,33 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if self._map_data is not None:
             # environment map
             self.__draw_map(self._map_data)
-            # groundtruth pose
-            self._gt_pose_plt, self._gt_heading_plt = \
-                self.__draw_robot_pose(self._gazebo_pose,
-                                      self._gt_pose_plt,
-                                      self._gt_heading_plt, 'blue')
-            # amcl pose
-            self._amcl_pose_plt, self._amcl_heading_plt = \
-                self.__draw_robot_pose(self._amcl_pose,
-                                      self._amcl_pose_plt,
-                                      self._amcl_heading_plt, 'green')
-            # amcl pose covariance
-            self._amcl_confidence_plt = \
-                self.__draw_pose_confidence(self._amcl_pose,
-                                            self._amcl_confidence_plt, 'green')
 
+            # groundtruth pose
+            self._gt_pose_plts['robot'], self._gt_pose_plts['heading'] = \
+                self.__draw_robot_pose(self._gazebo_pose,
+                                      self._gt_pose_plts['robot'],
+                                      self._gt_pose_plts['heading'], 'blue')
+
+            # groundtruth pose surroundings
+            self._gt_pose_plts['surroundings'] = \
+                self.__draw_surround_view(self._gazebo_pose,
+                                        self._gt_pose_plts['surroundings'])
+
+            # amcl pose
+            self._amcl_pose_plts['robot'], self._amcl_pose_plts['heading'] = \
+                self.__draw_robot_pose(self._amcl_pose,
+                                      self._amcl_pose_plts['robot'],
+                                      self._amcl_pose_plts['heading'], 'green')
+            # amcl pose covariance
+            self._amcl_pose_plts['confidence'] = \
+                self.__draw_pose_confidence(self._amcl_pose,
+                                            self._amcl_pose_plts['confidence'], 'green')
+
+            # laser scan
             self._scan_plt = \
                 self.__draw_laser_scan(self._laser_scan, self._scan_plt, 'C0')
 
-            self._plt_ax.legend([ self._gt_pose_plt, self._amcl_pose_plt, self._scan_plt ], \
+            self._plt_ax.legend([ self._gt_pose_plts['robot'], self._amcl_pose_plts['robot'], self._scan_plt ], \
                                 [ 'gt_pose', 'amcl_pose', 'laser_scan' ])
         plt.draw()
         plt.pause(0.00000000001)
@@ -456,35 +474,63 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         return pose_plt, heading_plt
 
-    def __draw_collision_sector(self,):
+    def __draw_surround_view(self, robot_pose, surroundings_plt: dict):
         """
+        Draw robot surroundings
+
+        :param utils.Pose robot_pose: robot's pose
+               dict surroundings_plt: plots of surroundings of robot
+        :return dict
         """
-        theta0_min = np.degrees(yaw) - self._sector_angle - 90
-        theta1_min = np.degrees(yaw) + self._sector_angle - 90
-        theta2_min = np.degrees(yaw) - self._sector_angle + 90
-        theta3_min = np.degrees(yaw) + self._sector_angle + 90
-        if collision_plts is not None:
-            collision_plts.append(
-                Wedge((pose_x, pose_y), self._side_threshold/scale,
-                    theta0_min, theta1_min, color='silver', alpha=0.5)
-            )       # left
-            collision_plts.append(
-                Wedge((pose_x, pose_y), self._forward_threshold/scale,
-                    theta1_min, theta2_min, color='silver', alpha=0.5)
-            )       # front
-            collision_plts.append(
-                Wedge((pose_x, pose_y), self._side_threshold/scale,
-                    theta2_min, theta2_max, color='silver', alpha=0.5)
-            )       # right
-            for c_plt in collision_plts:
-                    self._plt_ax.add_artist(c_plt)
+        if robot_pose is None:
+            return
 
-        if collision_plts is not None and len(collision_plts) == 3:
-            collision_plts[0].update({'center': [pose_x, pose_y], 'theta1': theta0_min, 'theta2': theta1_min})
-            collision_plts[1].update({'center': [pose_x, pose_y], 'theta1': theta1_min, 'theta2': theta2_min})
-            collision_plts[2].update({'center': [pose_x, pose_y], 'theta1': theta2_min, 'theta2': theta2_max})
+        # rescale robot position
+        scale = self._map_data.get_scale()
+        pose_x, pose_y, _ = robot_pose.get_position()
+        pose_x = pose_x / scale
+        pose_y = pose_y / scale
+        _, _, yaw = robot_pose.get_euler()
 
+        # calculate sector angles -> anti-clockwise direction
+        left_min = np.degrees(yaw) + self._front_view/2
+        left_max = np.degrees(yaw) + self._front_view/2 + self._left_view
+        left_color = 'silver'
+        right_min = np.degrees(yaw) - self._front_view/2 - self._right_view
+        right_max = np.degrees(yaw) - self._front_view/2
+        right_color = 'silver'
+        front_min = np.degrees(yaw) - self._front_view/2
+        front_max = np.degrees(yaw) + self._front_view/2
+        front_color = 'silver'
 
+        if surroundings_plt['front'] == None:
+            # left
+            surroundings_plt['left'] = Wedge((pose_x, pose_y), self._left_threshold/scale,
+                    left_min, left_max, color=left_color, alpha=0.5)
+            self._plt_ax.add_artist(surroundings_plt['left'])
+            # front
+            surroundings_plt['front'] = Wedge((pose_x, pose_y), self._front_threshold/scale,
+                    front_min, front_max, color=front_color, alpha=0.5)
+            self._plt_ax.add_artist(surroundings_plt['front'])
+            # right
+            surroundings_plt['right'] = Wedge((pose_x, pose_y), self._right_threshold/scale,
+                    right_min, right_max, color=right_color, alpha=0.5)
+            self._plt_ax.add_artist(surroundings_plt['right'])
+        else:
+            surroundings_plt['left'].update({'center': [pose_x, pose_y],
+                                             'theta1': left_min,
+                                             'theta2': left_max,
+                                             'color': left_color})
+            surroundings_plt['front'].update({'center': [pose_x, pose_y],
+                                              'theta1': front_min,
+                                              'theta2': front_max,
+                                              'color': front_color})
+            surroundings_plt['right'].update({'center': [pose_x, pose_y],
+                                              'theta1': right_min,
+                                              'theta2': right_max,
+                                              'color': right_color})
+
+        return surroundings_plt
 
     def __draw_pose_confidence(self, robot_pose, confidence_plt, color: str, n_std=1.0):
         """
