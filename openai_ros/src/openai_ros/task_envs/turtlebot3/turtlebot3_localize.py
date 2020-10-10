@@ -73,7 +73,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         plt.show()
         self._map_plt = None
         self._gt_pose_plt = None
-        self._gt_collision_plts = []
+        self._gt_collision_plts = {}
         self._gt_heading_plt = None
         self._amcl_pose_plt = None
         self._amcl_heading_plt = None
@@ -91,14 +91,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             # environment map
             self.__draw_map(self._map_data)
             # groundtruth pose
-            self._gt_pose_plt, self._gt_collision_plts, self._gt_heading_plt = \
+            self._gt_pose_plt, self._gt_heading_plt = \
                 self.__draw_robot_pose(self._gazebo_pose,
-                                      self._gt_pose_plt, self._gt_collision_plts,
+                                      self._gt_pose_plt,
                                       self._gt_heading_plt, 'blue')
             # amcl pose
-            self._amcl_pose_plt, _, self._amcl_heading_plt = \
+            self._amcl_pose_plt, self._amcl_heading_plt = \
                 self.__draw_robot_pose(self._amcl_pose,
-                                      self._amcl_pose_plt, None,
+                                      self._amcl_pose_plt,
                                       self._amcl_heading_plt, 'green')
             # amcl pose covariance
             self._amcl_confidence_plt = \
@@ -421,17 +421,16 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
             self._is_new_map = False
 
-    def __draw_robot_pose(self, robot_pose, pose_plt: Wedge, collision_plts: list, heading_plt, color: str):
+    def __draw_robot_pose(self, robot_pose, pose_plt: Wedge, heading_plt, color: str):
         """
         Draw robot pose
 
         :param utils.Pose robot_pose: robot's pose
                matplotlib.patches.Wedge pose_plt: plot of robot position
-               list[matplotlib.patches.Wedge] collision_plts: plots of safe distance
                matplotlib.lines.Line2D heading_plt: plot of robot heading
                str color: color used to render robot position and heading
 
-        :return matplotlib.patches.Wedge, list[matplotlib.patches.Wedge], matplotlib.lines.Line2D
+        :return matplotlib.patches.Wedge, matplotlib.lines.Line2D
         """
         if robot_pose is None:
             return
@@ -447,39 +446,45 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         xdata = [pose_x, pose_x + self._robot_radius* line_len * np.cos(yaw)]
         ydata = [pose_y, pose_y + self._robot_radius* line_len * np.sin(yaw)]
 
-        theta0_min = np.degrees(yaw) - self._sector_angle - 90
-        theta1_min = np.degrees(yaw) + self._sector_angle - 90
-        theta2_min = np.degrees(yaw) - self._sector_angle + 90
-        theta2_max = np.degrees(yaw) + self._sector_angle + 90
-
         if pose_plt == None:
             pose_plt = Wedge((pose_x, pose_y), self._robot_radius, 0, 360, color=color, alpha=0.5)
             self._plt_ax.add_artist(pose_plt)
-            if collision_plts is not None:
-                collision_plts.append(
-                    Wedge((pose_x, pose_y), self._side_threshold/scale,
-                        theta0_min, theta1_min, color='silver', alpha=0.5)
-                )       # left
-                collision_plts.append(
-                    Wedge((pose_x, pose_y), self._forward_threshold/scale,
-                        theta1_min, theta2_min, color='silver', alpha=0.5)
-                )       # front
-                collision_plts.append(
-                    Wedge((pose_x, pose_y), self._side_threshold/scale,
-                        theta2_min, theta2_max, color='silver', alpha=0.5)
-                )       # right
-                for c_plt in collision_plts:
-                        self._plt_ax.add_artist(c_plt)
             heading_plt, = self._plt_ax.plot(xdata, ydata, color=color, alpha=0.5)
         else:
             pose_plt.update({'center': [pose_x, pose_y]})
-            if collision_plts is not None and len(collision_plts) == 3:
-                collision_plts[0].update({'center': [pose_x, pose_y], 'theta1': theta0_min, 'theta2': theta1_min})
-                collision_plts[1].update({'center': [pose_x, pose_y], 'theta1': theta1_min, 'theta2': theta2_min})
-                collision_plts[2].update({'center': [pose_x, pose_y], 'theta1': theta2_min, 'theta2': theta2_max})
             heading_plt.update({'xdata': xdata, 'ydata': ydata})
 
-        return pose_plt, collision_plts, heading_plt
+        return pose_plt, heading_plt
+
+    def __draw_collision_sector(self,):
+        """
+        """
+        theta0_min = np.degrees(yaw) - self._sector_angle - 90
+        theta1_min = np.degrees(yaw) + self._sector_angle - 90
+        theta2_min = np.degrees(yaw) - self._sector_angle + 90
+        theta3_min = np.degrees(yaw) + self._sector_angle + 90
+        if collision_plts is not None:
+            collision_plts.append(
+                Wedge((pose_x, pose_y), self._side_threshold/scale,
+                    theta0_min, theta1_min, color='silver', alpha=0.5)
+            )       # left
+            collision_plts.append(
+                Wedge((pose_x, pose_y), self._forward_threshold/scale,
+                    theta1_min, theta2_min, color='silver', alpha=0.5)
+            )       # front
+            collision_plts.append(
+                Wedge((pose_x, pose_y), self._side_threshold/scale,
+                    theta2_min, theta2_max, color='silver', alpha=0.5)
+            )       # right
+            for c_plt in collision_plts:
+                    self._plt_ax.add_artist(c_plt)
+
+        if collision_plts is not None and len(collision_plts) == 3:
+            collision_plts[0].update({'center': [pose_x, pose_y], 'theta1': theta0_min, 'theta2': theta1_min})
+            collision_plts[1].update({'center': [pose_x, pose_y], 'theta1': theta1_min, 'theta2': theta2_min})
+            collision_plts[2].update({'center': [pose_x, pose_y], 'theta1': theta2_min, 'theta2': theta2_max})
+
+
 
     def __draw_pose_confidence(self, robot_pose, confidence_plt, color: str, n_std=1.0):
         """
