@@ -258,6 +258,44 @@ class Robot():
         super(Robot, self).__init__()
 
         self.__pose = Pose()
+        self.__surroundings = {
+            'left':
+                {
+                    'min_angle': 0.0,
+                    'start_sector': 0,
+                    'max_angle': 0.0,
+                    'end_sector': 0,
+                    'sector_color': 'silver',
+                    'threshold': 0.4,
+                },
+            'back':
+                {
+                    'min_angle': 0.0,
+                    'start_sector': 0,
+                    'max_angle': 0.0,
+                    'end_sector': 0,
+                    'sector_color': 'silver',
+                    'threshold': 0.3,
+                },
+            'right':
+                {
+                    'min_angle': 0.0,
+                    'start_sector': 0,
+                    'max_angle': 0.0,
+                    'end_sector': 0,
+                    'sector_color': 'silver',
+                    'threshold': 0.4,
+                },
+            'front':
+                {
+                    'min_angle': 0.0,
+                    'start_sector': 0,
+                    'max_angle': 0.0,
+                    'end_sector': 0,
+                    'sector_color': 'silver',
+                    'threshold': 0.6,
+                }
+        }
 
     def set_pose(self, pose, scale=1):
         """
@@ -278,3 +316,17 @@ class Robot():
         :return utils.Pose
         """
         return self.__pose
+
+    def set_surroundings(self, surroundings_dict):
+        """
+        Sets the robot surroundings
+
+        :param dict surroundings_dict: dictionary of surrounding details
+        """
+        self.__surroundings = surroundings_dict
+
+    def get_surroundings(self):
+        """
+        Gets the robot surroundings
+        """
+        return self.__surroundings
