@@ -40,7 +40,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._init_angular_speed = 0.0
         self._linear_forward_speed = 0.5
         self._linear_turn_speed = 0.05
-        self._angular_speed = 1.0
+        self._angular_speed = 0.3
         self._dist_threshold = 0.1
         self._ent_threshold = -1.5
 
@@ -323,14 +323,25 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
-        # done if within distance threshold range with smallest entropy
-        # or max steps elapsed
-        if self._current_step > self._max_steps or \
+        left_details = self._robot.get_surroundings()['left']
+        back_details = self._robot.get_surroundings()['back']
+        right_details = self._robot.get_surroundings()['right']
+        front_details = self._robot.get_surroundings()['front']
+        if front_details['obstacle_sector'] == 1 and \
+            back_details['obstacle_sector'] == 1 and \
+            (left_details['obstacle_sector'] == 1 or right_details['obstacle_sector'] == 1):
+            # done if robot is stuck
+            self._episode_done = True
+        elif self._current_step > self._max_steps or \
             ( self._amcl_pose.get_estimate_error() < self._dist_threshold and \
                  ( np.isinf(self._amcl_pose.get_entropy()) or \
                      self._amcl_pose.get_entropy() < self._ent_threshold )
             ):
+            # done if within distance threshold range with smallest entropy
+            # or max steps elapsed
             self._episode_done = True
+        else:
+            self._episode_done = False
 
         return self._episode_done
 
@@ -760,7 +771,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     collision_idx = idx//self._sector_angle
                     if lrange < self._sector_laser_scan[collision_idx][0]:
                         self._sector_laser_scan[collision_idx][0] = lrange
-                        self._sector_laser_scan[collision_idx][1] = langle
+                        self._sector_laser_scan[collision_idx][1] = langle - gt_a
             else:
                 # show scan w.r.t groundtruth pose
                 self._check_gazebo_data_is_ready()  # get latest _gt_pose
@@ -784,7 +795,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     collision_idx = idx//self._sector_angle
                     if lrange < self._sector_laser_scan[collision_idx][0]:
                         self._sector_laser_scan[collision_idx][0] = lrange
-                        self._sector_laser_scan[collision_idx][1] = langle
+                        self._sector_laser_scan[collision_idx][1] = langle - gt_a
 
         scan_points = np.asarray(scan_points)
         return scan_points
@@ -840,8 +851,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         front_details['min_angle'] = np.degrees(yaw) - front_details['view_field']/2
         front_details['max_angle'] = np.degrees(yaw) + front_details['view_field']/2
-        front_details['start_sector'] = (front_details['view_field']/2)//self._sector_angle
-        front_details['end_sector'] = (360 - front_details['view_field']/2)//self._sector_angle - 1
+        front_details['start_sector'] = (360 - front_details['view_field']/2)//self._sector_angle - 1
+        front_details['end_sector'] = (front_details['view_field']/2)//self._sector_angle
 
         # check for nearest obstacles in sectors
         for idx in range(len(self._sector_laser_scan)):
@@ -864,12 +875,12 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     and beam[0] < right_details['threshold']:
                 right_details['sector_color'] = 'red'
                 right_details['obstacle_sector'] = 1
-            elif idx >= front_details['start_sector'] \
-                    and idx <= front_details['end_sector'] \
+            elif (idx >= front_details['start_sector'] \
+                    or idx <= front_details['end_sector']) \
                     and beam[0] < front_details['threshold']:
-                front_details['sector_color'] = 'red'
+                front_details['sector_color'] = 'red'   # for front logic is different
                 front_details['obstacle_sector'] = 1
-        
+
         robot.set_surroundings(surroundings_dict)
 
         return robot
