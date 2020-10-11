@@ -245,3 +245,36 @@ class Pose():
         :return str
         """
         return ' position: {0},\n orientation: {1},\n covariance: {2}'.format(self.__position, self.__euler, self.__covariance)
+
+class Robot():
+    """
+        Robot class is an implementation to store robot details
+    """
+
+    def __init__(self):
+        """
+        Initialize Robot class
+        """
+        super(Robot, self).__init__()
+
+        self.__pose = Pose()
+
+    def set_pose(self, pose, scale=1):
+        """
+        Sets the robot pose
+
+        :param utils.Pose pose: robot pose
+               int scale: scale the pose
+        """
+        self.__pose = pose
+
+        x, y, z = self.__pose.get_position() / scale
+        self.__pose.set_position(x, y, z)
+
+    def get_pose(self):
+        """
+        Gets the robot pose
+
+        :return utils.Pose
+        """
+        return self.__pose

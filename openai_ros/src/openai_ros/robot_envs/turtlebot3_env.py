@@ -107,8 +107,6 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Checks all sensors and other simulation systems are operational
         """
 
-        self._check_all_sensors_are_ready()
-
         if self._request_map:
             self._check_map_data_is_ready()
         if self._request_amcl:
@@ -116,6 +114,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         if self._request_gazebo_data:
             self._check_gazebo_data_is_ready()
 
+        self._check_all_sensors_are_ready()
 
     def _check_publishers_connection(self):
         """

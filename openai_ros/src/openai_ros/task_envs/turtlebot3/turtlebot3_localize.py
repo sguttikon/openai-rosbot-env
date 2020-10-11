@@ -2,7 +2,7 @@
 
 import rospy
 from openai_ros.robot_envs import turtlebot3_env
-from openai_ros.utils import Map, Pose
+from openai_ros.utils import Map, Pose, Robot
 from gym import spaces
 from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped, PointStamped
 from gazebo_msgs.msg import ModelStates
@@ -47,6 +47,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._front_threshold = 0.6
         self._left_threshold = self._right_threshold = 0.4
 
+        self._robot = Robot()
         self._is_new_map = False
         self._robot_radius = 3.0
         self._episode_done = False
@@ -57,7 +58,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._sector_angle = 30 # degrees view
         self._front_view = 120 # degrees view
         self._left_view = self._right_view = 60 # degrees view
-        self._collision = np.zeros((360//self._sector_angle, 2), dtype=float)
+        self._collision = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
         self._is_collision = False
 
         # code realted to sensors
@@ -80,7 +81,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             'surroundings': {
                 'front': None,
                 'left': None,
-                'right': None
+                'right': None,
+                'sector_beams': [],
             },
         }
         self._amcl_pose_plts = {
@@ -103,13 +105,13 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
             # groundtruth pose
             self._gt_pose_plts['robot'], self._gt_pose_plts['heading'] = \
-                self.__draw_robot_pose(self._gazebo_pose,
+                self.__draw_robot_pose(self._robot.get_pose(),
                                       self._gt_pose_plts['robot'],
                                       self._gt_pose_plts['heading'], 'blue')
 
             # groundtruth pose surroundings
             self._gt_pose_plts['surroundings'] = \
-                self.__draw_surround_view(self._gazebo_pose,
+                self.__draw_surround_view(self._robot.get_pose(),
                                         self._gt_pose_plts['surroundings'])
 
             # amcl pose
@@ -167,6 +169,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 rospy.logwarn('received amcl pose must be in the global frame')
 
             self._amcl_pose = self.__process_pose_cov_msg(pose_msg.pose)
+            # rescale robot position
+            x, y, z = self._amcl_pose.get_position() / self._map_data.get_scale()
+            self._amcl_pose.set_position(x, y, z)
 
     def _check_gazebo_data_is_ready(self):
         """
@@ -184,7 +189,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             rosbot_name = 'turtlebot3'
             if rosbot_name in data.name:
                 turtlebot_idx = data.name.index(rosbot_name)
-                self._gazebo_pose = self.__process_pose_msg(data.pose[turtlebot_idx])
+                gt_pose = self.__process_pose_msg(data.pose[turtlebot_idx])
+                self._robot.set_pose(gt_pose, self._map_data.get_scale())
             else:
                 rospy.logwarn('cannot retrieve ground truth pose')
 
@@ -306,7 +312,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Return the observation from the environment
         """
-        sqr_dist_err = self.__estimate_pose_error(self._gazebo_pose, self._amcl_pose)
+        sqr_dist_err = self.__estimate_pose_error(self._robot.get_pose(), self._amcl_pose)
         self._amcl_pose.set_estimate_error(sqr_dist_err)
 
         return self._particle_cloud
@@ -453,16 +459,13 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if robot_pose is None:
             return
 
-        # rescale robot position
-        scale = self._map_data.get_scale()
+        # get robot position
         pose_x, pose_y, _ = robot_pose.get_position()
-        pose_x = pose_x / scale
-        pose_y = pose_y / scale
         _, _, yaw = robot_pose.get_euler()
 
         line_len = 3.0
-        xdata = [pose_x, pose_x + self._robot_radius* line_len * np.cos(yaw)]
-        ydata = [pose_y, pose_y + self._robot_radius* line_len * np.sin(yaw)]
+        xdata = [pose_x, pose_x + (self._robot_radius + line_len) * np.cos(yaw)]
+        ydata = [pose_y, pose_y + (self._robot_radius + line_len) * np.sin(yaw)]
 
         if pose_plt == None:
             pose_plt = Wedge((pose_x, pose_y), self._robot_radius, 0, 360, color=color, alpha=0.5)
@@ -485,23 +488,56 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if robot_pose is None:
             return
 
-        # rescale robot position
+        # get robot position
         scale = self._map_data.get_scale()
         pose_x, pose_y, _ = robot_pose.get_position()
-        pose_x = pose_x / scale
-        pose_y = pose_y / scale
         _, _, yaw = robot_pose.get_euler()
 
         # calculate sector angles -> anti-clockwise direction
         left_min = np.degrees(yaw) + self._front_view/2
         left_max = np.degrees(yaw) + self._front_view/2 + self._left_view
         left_color = 'silver'
+        l_start = (self._front_view/2)//self._sector_angle
+        l_end = (self._front_view/2 + self._left_view)//self._sector_angle
+
         right_min = np.degrees(yaw) - self._front_view/2 - self._right_view
         right_max = np.degrees(yaw) - self._front_view/2
         right_color = 'silver'
+        r_start = (360 - self._front_view/2 - self._right_view)//self._sector_angle
+        r_end = (360 - self._front_view/2)//self._sector_angle
+
         front_min = np.degrees(yaw) - self._front_view/2
         front_max = np.degrees(yaw) + self._front_view/2
         front_color = 'silver'
+        f_start = (self._front_view/2)//self._sector_angle
+        f_end = (360 - self._front_view/2)//self._sector_angle
+
+        scan_beam = []
+        for idx in range(len(self._collision)):
+            beam = self._collision[idx]
+            if idx>=l_start and idx<l_end:
+                threshold = self._left_threshold
+            elif idx>=r_start and idx<r_end:
+                threshold = self._right_threshold
+            elif idx<f_start or idx>=f_end:
+                threshold = self._front_threshold
+            else:
+                threshold = -1
+
+            if (not np.isinf(beam[0])) and beam[0] < threshold:
+                x = [pose_x, pose_x + beam[0] * np.cos(beam[1]) / scale]
+                y = [pose_y, pose_y + beam[0] * np.sin(beam[1]) / scale]
+                if threshold == self._front_threshold:
+                    front_color = 'red'
+                elif threshold == self._right_threshold:
+                    right_color = 'red'
+                elif threshold == self._left_threshold:
+                    left_color = 'red'
+            else:
+                x = [pose_x, pose_x]
+                y = [pose_y, pose_y]
+            scan_beam.append([x, y])
+        scan_beam = np.asarray(scan_beam)
 
         if surroundings_plt['front'] == None:
             # left
@@ -516,6 +552,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             surroundings_plt['right'] = Wedge((pose_x, pose_y), self._right_threshold/scale,
                     right_min, right_max, color=right_color, alpha=0.5)
             self._plt_ax.add_artist(surroundings_plt['right'])
+
+            for idx in range(len(self._collision)):
+                beam_plot, = self._plt_ax.plot(scan_beam[idx, 0, :], scan_beam[idx, 1, :], color='k', alpha=0.5)
+                surroundings_plt['sector_beams'].append(beam_plot)
         else:
             surroundings_plt['left'].update({'center': [pose_x, pose_y],
                                              'theta1': left_min,
@@ -529,7 +569,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                                               'theta1': right_min,
                                               'theta2': right_max,
                                               'color': right_color})
-
+            for idx in range(len(self._collision)):
+                surroundings_plt['sector_beams'][idx].update({'xdata': scan_beam[idx, 0, :], 'ydata': scan_beam[idx, 1, :]})
         return surroundings_plt
 
     def __draw_pose_confidence(self, robot_pose, confidence_plt, color: str, n_std=1.0):
@@ -557,9 +598,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # compute mean and std
         scale_x = np.sqrt(covariance[0, 0] / scale) * n_std
-        mean_x = pose_x / scale
         scale_y = np.sqrt(covariance[1, 1] / scale) * n_std
-        mean_y = pose_y / scale
+        mean_x, mean_y = pose_x, pose_y
 
         transform = transforms.Affine2D().rotate_deg(45) \
                                          .scale(scale_x, scale_y) \
@@ -585,12 +625,12 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
 
         scale = self._map_data.get_scale()
-        xdata = laser_scan[:, 0]/scale
-        ydata = laser_scan[:, 1]/scale
+        xdata = laser_scan[:, 0]
+        ydata = laser_scan[:, 1]
         if scan_plt == None:
             scan_plt = plt.scatter(xdata, ydata, s=14, c=color)
         else:
-            scan_plt.set_offsets(laser_scan/scale)
+            scan_plt.set_offsets(laser_scan)
 
         return scan_plt
 
@@ -734,18 +774,20 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     if np.isnan(x) or np.isinf(x) or np.isnan(y) or np.isinf(y):
                         continue
                     else:
-                        scan_points.append([x, y])
+                        scale = self._map_data.get_scale()
+                        scan_points.append([x/scale, y/scale])
 
                     # store shortest beam range with angle per sector
                     collision_idx = idx//self._sector_angle
                     if lrange < self._collision[collision_idx][0]:
                         self._collision[collision_idx][0] = lrange
-                        self._collision[collision_idx][0] = langle
+                        self._collision[collision_idx][1] = langle
             else:
                 # show scan w.r.t groundtruth pose
-                self._check_gazebo_data_is_ready()  # get latest _gazebo_pose
-                gt_x, gt_y, _ = self._gazebo_pose.get_position()
-                _, _, gt_a = self._gazebo_pose.get_euler()
+                self._check_gazebo_data_is_ready()  # get latest _gt_pose
+                gt_x, gt_y, _ = self._robot.get_pose().get_position()
+                _, _, gt_a = self._robot.get_pose().get_euler()
+                scale = self._map_data.get_scale()
 
                 collision_idx = 0
                 self._collision[:, ...].fill(np.inf)
@@ -755,15 +797,15 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                         continue
                     # if beam hits obstacle, store bean endpoint
                     langle = gt_a + scan_msg.angle_min + ( idx * scan_msg.angle_increment )
-                    x = gt_x + lrange * np.cos(langle)
-                    y = gt_y + lrange * np.sin(langle)
+                    x = gt_x + lrange * np.cos(langle) / scale
+                    y = gt_y + lrange * np.sin(langle) / scale
                     scan_points.append([x, y])
 
                     # store shortest beam range with angle per sector
                     collision_idx = idx//self._sector_angle
                     if lrange < self._collision[collision_idx][0]:
                         self._collision[collision_idx][0] = lrange
-                        self._collision[collision_idx][0] = langle
+                        self._collision[collision_idx][1] = langle
 
         scan_points = np.asarray(scan_points)
         return scan_points
@@ -783,5 +825,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                np.linalg.norm( pose1.get_covariance() - pose2.get_covariance() )**2
 
         return sqr_dist_err
+
+    def __set_surroundings_details(self, robot):
+        """
+        Check the surroundings of robot
+
+        :params utils.Robot robot: robot details
+        :return utils.Robot
+        """
+        pass
 
     ###### private methods ######
