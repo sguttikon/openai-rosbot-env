@@ -265,9 +265,9 @@ class Robot():
                     'start_sector': 0,
                     'max_angle': 0.0,
                     'end_sector': 0,
-                    'sector_color': 'silver',
+                    'sector_color': 'lightgrey',
                     'threshold': 0.4,
-                    'view_field': 60, # degrees
+                    'view_field': 90, # degrees
                     'obstacle_sector': 0,
                 },
             'back':
@@ -276,9 +276,9 @@ class Robot():
                     'start_sector': 0,
                     'max_angle': 0.0,
                     'end_sector': 0,
-                    'sector_color': 'silver',
+                    'sector_color': 'lightgrey',
                     'threshold': 0.3,
-                    'view_field': 120, # degrees
+                    'view_field': 90, # degrees
                     'obstacle_sector': 0,
                 },
             'right':
@@ -287,9 +287,9 @@ class Robot():
                     'start_sector': 0,
                     'max_angle': 0.0,
                     'end_sector': 0,
-                    'sector_color': 'silver',
+                    'sector_color': 'lightgrey',
                     'threshold': 0.4,
-                    'view_field': 60, # degrees
+                    'view_field': 90, # degrees
                     'obstacle_sector': 0,
                 },
             'front':
@@ -298,14 +298,14 @@ class Robot():
                     'start_sector': 0,
                     'max_angle': 0.0,
                     'end_sector': 0,
-                    'sector_color': 'silver',
+                    'sector_color': 'lightgrey',
                     'threshold': 0.6,
-                    'view_field': 120, # degrees
+                    'view_field': 90, # degrees
                     'obstacle_sector': 0,
                 }
         }
         self._robot_radius = 3.0
-        self._sector_angle = 30 # degrees
+        self._sector_angle = 15 # degrees
 
 
     def set_pose(self, pose, scale=1):
