@@ -41,23 +41,23 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._linear_forward_speed = 0.5
         self._linear_turn_speed = 0.05
         self._angular_speed = 1.0
-        self._max_steps = 50
         self._dist_threshold = 0.1
         self._ent_threshold = -1.5
 
         self._robot = Robot()
+        self._sector_angle = self._robot._sector_angle
+        self._robot_radius = self._robot._robot_radius
+        self._sector_laser_scan = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
+
         self._is_new_map = False
-        self._robot_radius = 3.0
         self._episode_done = False
         self._current_step = 0
+        self._max_steps = 50
+
         # all sensor data, topic messages is assumed to be in same tf frame
         self._global_frame_id = 'map'
         self._scan_frame_id = 'base_scan'
-        self._sector_angle = 30 # degrees view
-        self._front_view = 120 # degrees view
-        self._left_view = self._right_view = 60 # degrees view
-        self._collision = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
-        self._is_collision = False
+        self._collision_action = False
 
         # code realted to sensors
         self._request_map = True
@@ -340,8 +340,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
-        if self._is_collision:
-            reward = -10.0
+        if self._collision_action:
+            reward = -1.0
         else:
             # to avoid division by zero
             #   sqr_error: error is always positive best value 0.0
@@ -369,35 +369,40 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # increment step counter
         self._current_step += 1
-        self._is_collision = False
+        self._collision_action = False
         linear_speed = 0.0
         angular_speed = 0.0
+
+        left_details = self._robot.get_surroundings()['left']
+        back_details = self._robot.get_surroundings()['back']
+        right_details = self._robot.get_surroundings()['right']
+        front_details = self._robot.get_surroundings()['front']
+
         if action == 0:     # move forward
-            indices = [] #np.where(self._collision < self._forward_threshold)[0]
-            if ( (0 not in indices) and (1 not in indices) and \
-                 (10 not in indices) and (11 not in indices) ):
+            if front_details['obstacle_sector'] == 0:
                 linear_speed = self._linear_forward_speed
                 angular_speed = 0.0
             else:
-                rospy.logwarn('cannot execute action: 0, obstacle in path')
-                self._is_collision = True
+                # obstacle in front sector
+                rospy.logwarn('action: 0 not executed, will hit obstacle')
+                self._collision_action = True
         elif action == 1:   # turn left
-            indices = [] #np.where(self._collision < self._side_threshold)[0]
-            if ( (2 not in indices) and (3 not in indices) ):
+            if left_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
                 linear_speed = self._linear_turn_speed
                 angular_speed = self._angular_speed
             else:
-                rospy.logwarn('cannot execute action: 1, obstacle in path')
-                self._is_collision = True
+                # obstacle in left or back sector
+                rospy.logwarn('action: 1 not executed, will hit obstacle')
+                self._collision_action = True
         elif action == 2:   # turn right
-            indices = [] #np.where(self._collision < self._side_threshold)[0]
-            if ( (8 not in indices) and (9 not in indices) ):
+            if right_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
                 linear_speed = self._linear_turn_speed
                 angular_speed = -1 * self._angular_speed
             else:
-                rospy.logwarn('cannot execute action: 1, obstacle in path')
-                self._is_collision = True
-        else:               # do nothing / stop
+                # obstacle in right or back sector
+                rospy.logwarn('action: 2 not executed, will hit obstacle')
+                self._collision_action = True
+        else:   # do nothing / stop
             pass
 
         self._move_base( linear_speed, angular_speed,
@@ -728,7 +733,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
                 # transform available laser scan point to map frame point
                 collision_idx = 0
-                self._collision[:, ...].fill(np.inf)
+                self._sector_laser_scan[:, ...].fill(np.inf)
                 for idx in range(len(scan_msg.ranges)):
                     lrange = scan_msg.ranges[idx]
                     if np.isinf(lrange):
@@ -753,9 +758,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
                     # store shortest beam range with angle per sector
                     collision_idx = idx//self._sector_angle
-                    if lrange < self._collision[collision_idx][0]:
-                        self._collision[collision_idx][0] = lrange
-                        self._collision[collision_idx][1] = langle
+                    if lrange < self._sector_laser_scan[collision_idx][0]:
+                        self._sector_laser_scan[collision_idx][0] = lrange
+                        self._sector_laser_scan[collision_idx][1] = langle
             else:
                 # show scan w.r.t groundtruth pose
                 self._check_gazebo_data_is_ready()  # get latest _gt_pose
@@ -764,7 +769,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 scale = self._map_data.get_scale()
 
                 collision_idx = 0
-                self._collision[:, ...].fill(np.inf)
+                self._sector_laser_scan[:, ...].fill(np.inf)
                 for idx in range(len(scan_msg.ranges)):
                     lrange = scan_msg.ranges[idx]
                     if np.isinf(lrange):
@@ -777,9 +782,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
                     # store shortest beam range with angle per sector
                     collision_idx = idx//self._sector_angle
-                    if lrange < self._collision[collision_idx][0]:
-                        self._collision[collision_idx][0] = lrange
-                        self._collision[collision_idx][1] = langle
+                    if lrange < self._sector_laser_scan[collision_idx][0]:
+                        self._sector_laser_scan[collision_idx][0] = lrange
+                        self._sector_laser_scan[collision_idx][1] = langle
 
         scan_points = np.asarray(scan_points)
         return scan_points
@@ -813,32 +818,34 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # calculate sector angles -> anti-clockwise direction
         left_details = surroundings_dict['left']
-        left_details['min_angle'] = np.degrees(yaw) + self._front_view/2
-        left_details['max_angle'] = np.degrees(yaw) + self._front_view/2 + self._left_view
-        left_details['start_sector'] = (self._front_view/2)//self._sector_angle
-        left_details['end_sector'] = (self._front_view/2 + self._left_view)//self._sector_angle - 1
-
         back_details = surroundings_dict['back']
-        back_details['min_angle'] = np.degrees(yaw) + self._front_view/2 + self._left_view
-        back_details['max_angle'] = np.degrees(yaw) - self._front_view/2 - self._right_view
-        back_details['start_sector'] = (self._front_view/2 + self._left_view)//self._sector_angle
-        back_details['end_sector'] = (360 - self._front_view/2 - self._right_view)//self._sector_angle - 1
-
         right_details = surroundings_dict['right']
-        right_details['min_angle'] = np.degrees(yaw) - self._front_view/2 - self._right_view
-        right_details['max_angle'] = np.degrees(yaw) - self._front_view/2
-        right_details['start_sector'] = (360 - self._front_view/2 - self._right_view)//self._sector_angle
-        right_details['end_sector'] = (360 - self._front_view/2)//self._sector_angle - 1
-
         front_details = surroundings_dict['front']
-        front_details['min_angle'] = np.degrees(yaw) - self._front_view/2
-        front_details['max_angle'] = np.degrees(yaw) + self._front_view/2
-        front_details['start_sector'] = (self._front_view/2)//self._sector_angle
-        front_details['end_sector'] = (360 - self._front_view/2)//self._sector_angle - 1
+        left_details['view_field']/2
+
+        left_details['min_angle'] = np.degrees(yaw) + front_details['view_field']/2
+        left_details['max_angle'] = np.degrees(yaw) + front_details['view_field']/2 + left_details['view_field']
+        left_details['start_sector'] = (front_details['view_field']/2) // self._sector_angle
+        left_details['end_sector'] = (front_details['view_field']/2 + left_details['view_field'])//self._sector_angle - 1
+
+        back_details['min_angle'] = np.degrees(yaw) + front_details['view_field']/2 + left_details['view_field']
+        back_details['max_angle'] = np.degrees(yaw) - front_details['view_field']/2 - right_details['view_field']
+        back_details['start_sector'] = (front_details['view_field']/2 + left_details['view_field'])//self._sector_angle
+        back_details['end_sector'] = (360 - front_details['view_field']/2 - right_details['view_field'])//self._sector_angle - 1
+
+        right_details['min_angle'] = np.degrees(yaw) - front_details['view_field']/2 - right_details['view_field']
+        right_details['max_angle'] = np.degrees(yaw) - front_details['view_field']/2
+        right_details['start_sector'] = (360 - front_details['view_field']/2 - right_details['view_field'])//self._sector_angle
+        right_details['end_sector'] = (360 - front_details['view_field']/2)//self._sector_angle - 1
+
+        front_details['min_angle'] = np.degrees(yaw) - front_details['view_field']/2
+        front_details['max_angle'] = np.degrees(yaw) + front_details['view_field']/2
+        front_details['start_sector'] = (front_details['view_field']/2)//self._sector_angle
+        front_details['end_sector'] = (360 - front_details['view_field']/2)//self._sector_angle - 1
 
         # check for nearest obstacles in sectors
-        for idx in range(len(self._collision)):
-            beam = self._collision[idx]
+        for idx in range(len(self._sector_laser_scan)):
+            beam = self._sector_laser_scan[idx]
             if np.isinf(beam[0]):
                 continue
 
@@ -846,19 +853,23 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     and idx <= left_details['end_sector'] \
                     and beam[0] < left_details['threshold']:
                 left_details['sector_color'] = 'red'
+                left_details['obstacle_sector'] = 1
             elif idx >= back_details['start_sector'] \
                     and idx <= back_details['end_sector'] \
                     and beam[0] < back_details['threshold']:
                 back_details['sector_color'] = 'red'
+                back_details['obstacle_sector'] = 1
             elif idx >= right_details['start_sector'] \
                     and idx <= right_details['end_sector'] \
                     and beam[0] < right_details['threshold']:
                 right_details['sector_color'] = 'red'
+                right_details['obstacle_sector'] = 1
             elif idx >= front_details['start_sector'] \
                     and idx <= front_details['end_sector'] \
                     and beam[0] < front_details['threshold']:
                 front_details['sector_color'] = 'red'
-
+                front_details['obstacle_sector'] = 1
+        
         robot.set_surroundings(surroundings_dict)
 
         return robot
