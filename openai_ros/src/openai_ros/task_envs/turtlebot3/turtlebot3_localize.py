@@ -314,7 +314,12 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         sqr_dist_err = self.__estimate_pose_error(self._robot.get_pose(), self._amcl_pose)
         self._amcl_pose.set_estimate_error(sqr_dist_err)
 
-        return self._particle_cloud
+        # update the surroundings of the robot
+        self._robot.update_surroundings(self._sector_laser_scan)
+
+        return {
+            'particle_cloud' : self._particle_cloud
+        }
 
 
     def _is_done(self):
@@ -330,14 +335,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if front_details['obstacle_sector'] == 1 and \
             back_details['obstacle_sector'] == 1 and \
             (left_details['obstacle_sector'] == 1 or right_details['obstacle_sector'] == 1):
-            # done if robot is stuck
+            # episode done if robot is stuck
             self._episode_done = True
         elif self._current_step > self._max_steps or \
             ( self._amcl_pose.get_estimate_error() < self._dist_threshold and \
                  ( np.isinf(self._amcl_pose.get_entropy()) or \
                      self._amcl_pose.get_entropy() < self._ent_threshold )
             ):
-            # done if within distance threshold range with smallest entropy
+            # episode done if within distance threshold range with smallest entropy
             # or max steps elapsed
             self._episode_done = True
         else:
@@ -352,7 +357,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
 
         if self._collision_action:
-            reward = -1.0
+            reward = -0.1
+        elif done:
+            # bonus reward if successful
+            reward = 10.0
         else:
             # to avoid division by zero
             #   sqr_error: error is always positive best value 0.0
@@ -506,9 +514,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         pose_x, pose_y, _ = robot.get_pose().get_position()
         _, _, yaw = robot.get_pose().get_euler()
 
-        # check the surroundings of the robot
-        robot, scan_beams = self.__check_surrounding(robot)
-
+        scan_beams = robot.get_scan_beams()
         left_details = robot.get_surroundings()['left']
         back_details = robot.get_surroundings()['back']
         right_details = robot.get_surroundings()['right']
@@ -817,99 +823,5 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                np.linalg.norm( pose1.get_covariance() - pose2.get_covariance() )**2
 
         return sqr_dist_err
-
-    def __check_surrounding(self, robot):
-        """
-        Check the surroundings of robot
-
-        :params utils.Robot robot: robot details
-        :return utils.Robot
-                numpy.ndarray
-        """
-
-        scale = self._map_data.get_scale()
-        x, y, _ = robot.get_pose().get_position()
-        _, _, yaw = robot.get_pose().get_euler()
-        surroundings_dict = robot.get_surroundings()
-
-        # calculate sector angles -> anti-clockwise direction
-        left_details = surroundings_dict['left']
-        back_details = surroundings_dict['back']
-        right_details = surroundings_dict['right']
-        front_details = surroundings_dict['front']
-        left_details['view_field']/2
-
-        left_details['min_angle'] = np.degrees(yaw) + front_details['view_field']/2
-        left_details['max_angle'] = np.degrees(yaw) + front_details['view_field']/2 + left_details['view_field']
-        left_details['start_sector'] = (front_details['view_field']/2) // self._sector_angle
-        left_details['end_sector'] = (front_details['view_field']/2 + left_details['view_field'])//self._sector_angle - 1
-        left_details['sector_color'] = 'lightgrey'
-        left_details['obstacle_sector'] = 0
-
-        back_details['min_angle'] = np.degrees(yaw) + front_details['view_field']/2 + left_details['view_field']
-        back_details['max_angle'] = np.degrees(yaw) - front_details['view_field']/2 - right_details['view_field']
-        back_details['start_sector'] = (front_details['view_field']/2 + left_details['view_field'])//self._sector_angle
-        back_details['end_sector'] = (360 - front_details['view_field']/2 - right_details['view_field'])//self._sector_angle - 1
-        back_details['sector_color'] = 'lightgrey'
-        back_details['obstacle_sector'] = 0
-
-        right_details['min_angle'] = np.degrees(yaw) - front_details['view_field']/2 - right_details['view_field']
-        right_details['max_angle'] = np.degrees(yaw) - front_details['view_field']/2
-        right_details['start_sector'] = (360 - front_details['view_field']/2 - right_details['view_field'])//self._sector_angle
-        right_details['end_sector'] = (360 - front_details['view_field']/2)//self._sector_angle - 1
-        right_details['sector_color'] = 'lightgrey'
-        right_details['obstacle_sector'] = 0
-
-        front_details['min_angle'] = np.degrees(yaw) - front_details['view_field']/2
-        front_details['max_angle'] = np.degrees(yaw) + front_details['view_field']/2
-        front_details['start_sector'] = (360 - front_details['view_field']/2)//self._sector_angle
-        front_details['end_sector'] = (front_details['view_field']/2)//self._sector_angle - 1
-        front_details['sector_color'] = 'lightgrey'
-        front_details['obstacle_sector'] = 0
-
-        scan_beams = []
-        # check for nearest obstacles in sectors
-        for idx in range(len(self._sector_laser_scan)):
-            beam = self._sector_laser_scan[idx]
-            is_nearest = False
-            if np.isinf(beam[0]):
-                scan_beams.append([[x, x], [y, y]])
-                continue
-
-            if idx >= left_details['start_sector'] \
-                    and idx <= left_details['end_sector'] \
-                    and beam[0] < left_details['threshold']:
-                left_details['sector_color'] = 'lightcoral'
-                left_details['obstacle_sector'] = 1
-                is_nearest = True
-            elif idx >= back_details['start_sector'] \
-                    and idx <= back_details['end_sector'] \
-                    and beam[0] < back_details['threshold']:
-                back_details['sector_color'] = 'lightcoral'
-                back_details['obstacle_sector'] = 1
-                is_nearest = True
-            elif idx >= right_details['start_sector'] \
-                    and idx <= right_details['end_sector'] \
-                    and beam[0] < right_details['threshold']:
-                right_details['sector_color'] = 'lightcoral'
-                right_details['obstacle_sector'] = 1
-                is_nearest = True
-            elif (idx >= front_details['start_sector'] \
-                    or idx <= front_details['end_sector']) \
-                    and beam[0] < front_details['threshold']:
-                front_details['sector_color'] = 'lightcoral'   # for front sector logic is different
-                front_details['obstacle_sector'] = 1
-                is_nearest = True
-
-            if is_nearest:
-                xdata = [x, x + beam[0] * np.cos(yaw + beam[1]) / scale]
-                ydata = [y, y + beam[0] * np.sin(yaw + beam[1]) / scale]
-                scan_beams.append([xdata, ydata])
-            else:
-                scan_beams.append([[x, x], [y, y]])
-
-        robot.set_surroundings(surroundings_dict)
-
-        return robot, np.asarray(scan_beams)
 
     ###### private methods ######

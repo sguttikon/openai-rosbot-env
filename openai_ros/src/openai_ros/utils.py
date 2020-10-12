@@ -257,58 +257,76 @@ class Robot():
         """
         super(Robot, self).__init__()
 
+        self._f_space_color = 'lightgrey'
+        self._o_space_color = 'lightcoral'
         self.__pose = Pose()
-        self.__surroundings = {
-            'left':
-                {
-                    'min_angle': 0.0,
-                    'start_sector': 0,
-                    'max_angle': 0.0,
-                    'end_sector': 0,
-                    'sector_color': 'lightgrey',
-                    'threshold': 0.4,
-                    'view_field': 90, # degrees
-                    'obstacle_sector': 0,
-                },
-            'back':
-                {
-                    'min_angle': 0.0,
-                    'start_sector': 0,
-                    'max_angle': 0.0,
-                    'end_sector': 0,
-                    'sector_color': 'lightgrey',
-                    'threshold': 0.3,
-                    'view_field': 90, # degrees
-                    'obstacle_sector': 0,
-                },
-            'right':
-                {
-                    'min_angle': 0.0,
-                    'start_sector': 0,
-                    'max_angle': 0.0,
-                    'end_sector': 0,
-                    'sector_color': 'lightgrey',
-                    'threshold': 0.4,
-                    'view_field': 90, # degrees
-                    'obstacle_sector': 0,
-                },
-            'front':
-                {
-                    'min_angle': 0.0,
-                    'start_sector': 0,
-                    'max_angle': 0.0,
-                    'end_sector': 0,
-                    'sector_color': 'lightgrey',
-                    'threshold': 0.6,
-                    'view_field': 90, # degrees
-                    'obstacle_sector': 0,
-                }
+        self.__left_details = {
+            'min_angle': 0.0,
+            'start_sector': 0,
+            'max_angle': 0.0,
+            'end_sector': 0,
+            'sector_color': self._f_space_color,
+            'threshold': 0.4,
+            'view_field': 90, # degrees
+            'obstacle_sector': 0,
         }
+        self.__back_details = {
+            'min_angle': 0.0,
+            'start_sector': 0,
+            'max_angle': 0.0,
+            'end_sector': 0,
+            'sector_color': self._f_space_color,
+            'threshold': 0.3,
+            'view_field': 90, # degrees
+            'obstacle_sector': 0,
+        }
+        self.__right_details = {
+            'min_angle': 0.0,
+            'start_sector': 0,
+            'max_angle': 0.0,
+            'end_sector': 0,
+            'sector_color': self._f_space_color,
+            'threshold': 0.4,
+            'view_field': 90, # degrees
+            'obstacle_sector': 0,
+        }
+        self.__front_details = {
+            'min_angle': 0.0,
+            'start_sector': 0,
+            'max_angle': 0.0,
+            'end_sector': 0,
+            'sector_color': self._f_space_color,
+            'threshold': 0.6,
+            'view_field': 90, # degrees
+            'obstacle_sector': 0,
+        }
+
         self._robot_radius = 3.0
         self._sector_angle = 15 # degrees
+        self.__scan_beams = None
+        self.__map_scale = 1.0
 
+        self.__left_details['start_sector'] = (self.__front_details['view_field']/2) // self._sector_angle
+        self.__left_details['end_sector'] = (self.__front_details['view_field']/2 + \
+                    self.__left_details['view_field']) // self._sector_angle - 1
+        self.__back_details['start_sector'] = (self.__front_details['view_field']/2 + \
+                    self.__left_details['view_field']) //self._sector_angle
+        self.__back_details['end_sector'] = (360 - self.__front_details['view_field']/2 - \
+                    self.__right_details['view_field']) // self._sector_angle - 1
+        self.__right_details['start_sector'] = (360 - self.__front_details['view_field']/2 - \
+                    self.__right_details['view_field']) // self._sector_angle
+        self.__right_details['end_sector'] = (360 - self.__front_details['view_field']/2) // self._sector_angle - 1
+        self.__front_details['start_sector'] = (360 - self.__front_details['view_field']/2) // self._sector_angle
+        self.__front_details['end_sector'] = (self.__front_details['view_field']/2) // self._sector_angle - 1
 
-    def set_pose(self, pose, scale=1):
+        self.__surroundings = {
+            'left': self.__left_details,
+            'back': self.__back_details,
+            'right': self.__right_details,
+            'front': self.__front_details,
+        }
+
+    def set_pose(self, pose, scale=1.0):
         """
         Sets the robot pose
 
@@ -316,7 +334,7 @@ class Robot():
                int scale: scale the pose
         """
         self.__pose = pose
-
+        self.__map_scale = scale
         x, y, z = self.__pose.get_position() / scale
         self.__pose.set_position(x, y, z)
 
@@ -328,16 +346,93 @@ class Robot():
         """
         return self.__pose
 
-    def set_surroundings(self, surroundings_dict):
-        """
-        Sets the robot surroundings
-
-        :param dict surroundings_dict: dictionary of surrounding details
-        """
-        self.__surroundings = surroundings_dict
-
     def get_surroundings(self):
         """
         Gets the robot surroundings
         """
         return self.__surroundings
+
+    def get_scan_beams(self):
+        """
+        Gets the scan beams
+
+        :param numpy.ndarray
+        """
+        return self.__scan_beams
+
+    def update_surroundings(self, sector_laser_scan):
+        """
+        Update the surroundings details of robot
+        :param numpy.ndarray sector_laser_scan: nearest obstacle laser scan per sector
+        """
+
+        x, y, _ = self.__pose.get_position()
+        _, _, yaw = self.__pose.get_euler()
+
+        # calculate sector angles -> anti-clockwise direction
+        self.__left_details['min_angle'] = np.degrees(yaw) + self.__front_details['view_field']/2
+        self.__left_details['max_angle'] = np.degrees(yaw) + self.__front_details['view_field']/2 + \
+                    self.__left_details['view_field']
+        self.__left_details['sector_color'] = self._f_space_color
+        self.__left_details['obstacle_sector'] = 0
+
+        self.__back_details['min_angle'] = np.degrees(yaw) + self.__front_details['view_field']/2 + \
+                    self.__left_details['view_field']
+        self.__back_details['max_angle'] = np.degrees(yaw) - self.__front_details['view_field']/2 - \
+                    self.__right_details['view_field']
+        self.__back_details['sector_color'] = self._f_space_color
+        self.__back_details['obstacle_sector'] = 0
+
+        self.__right_details['min_angle'] = np.degrees(yaw) - self.__front_details['view_field']/2 - \
+                    self.__right_details['view_field']
+        self.__right_details['max_angle'] = np.degrees(yaw) - self.__front_details['view_field']/2
+        self.__right_details['sector_color'] = self._f_space_color
+        self.__right_details['obstacle_sector'] = 0
+
+        self.__front_details['min_angle'] = np.degrees(yaw) - self.__front_details['view_field']/2
+        self.__front_details['max_angle'] = np.degrees(yaw) + self.__front_details['view_field']/2
+        self.__front_details['sector_color'] = self._f_space_color
+        self.__front_details['obstacle_sector'] = 0
+
+        scan_beams = []
+        # check for nearest obstacles in sectors
+        for idx in range(len(sector_laser_scan)):
+            beam = sector_laser_scan[idx]
+            is_nearest = False
+            if np.isinf(beam[0]):
+                scan_beams.append([[x, x], [y, y]])
+                continue
+
+            if idx >= self.__left_details['start_sector'] \
+                    and idx <= self.__left_details['end_sector'] \
+                    and beam[0] < self.__left_details['threshold']:
+                self.__left_details['sector_color'] = self._o_space_color
+                self.__left_details['obstacle_sector'] = 1
+                is_nearest = True
+            elif idx >= self.__back_details['start_sector'] \
+                    and idx <= self.__back_details['end_sector'] \
+                    and beam[0] < self.__back_details['threshold']:
+                self.__back_details['sector_color'] = self._o_space_color
+                self.__back_details['obstacle_sector'] = 1
+                is_nearest = True
+            elif idx >= self.__right_details['start_sector'] \
+                    and idx <= self.__right_details['end_sector'] \
+                    and beam[0] < self.__right_details['threshold']:
+                self.__right_details['sector_color'] = self._o_space_color
+                self.__right_details['obstacle_sector'] = 1
+                is_nearest = True
+            elif (idx >= self.__front_details['start_sector'] \
+                    or idx <= self.__front_details['end_sector']) \
+                    and beam[0] < self.__front_details['threshold']:
+                self.__front_details['sector_color'] = self._o_space_color   # for front sector logic is different
+                self.__front_details['obstacle_sector'] = 1
+                is_nearest = True
+
+            if is_nearest:
+                xdata = [x, x + beam[0] * np.cos(yaw + beam[1]) / self.__map_scale]
+                ydata = [y, y + beam[0] * np.sin(yaw + beam[1]) / self.__map_scale]
+                scan_beams.append([xdata, ydata])
+            else:
+                scan_beams.append([[x, x], [y, y]])
+
+        self.__scan_beams = np.asarray(scan_beams)
