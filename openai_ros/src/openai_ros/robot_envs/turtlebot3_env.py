@@ -58,7 +58,6 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._init_pose_pub = rospy.Publisher('/initialpose', PoseWithCovarianceStamped, queue_size = 1)
 
         self._check_publishers_connection()
-        self._check_all_systems_are_ready()
         self.gazebo.pause_sim()
         rospy.loginfo('status: system check passed')
 
@@ -375,7 +374,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         cmd_vel_msg.angular.z = angular_speed
         self._check_cmd_vel_pub_ready()
         self._cmd_vel_pub.publish(cmd_vel_msg)
-
+        rospy.sleep(0.2)
         # wait for the given twist message to be executed correctly
         delta = self._wait_until_twist_achieved(cmd_vel_msg, motion_error, update_rate)
 
@@ -418,6 +417,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         # loop until the twist is achieved
         while not rospy.is_shutdown():
+
+            # TODO: check if robot has crashed
+
             current_odom = self._check_odom_data_is_ready()
             if current_odom is None:
                 # odom data not available

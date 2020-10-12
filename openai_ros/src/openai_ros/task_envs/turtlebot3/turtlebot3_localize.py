@@ -40,8 +40,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._max_laser_value = 6
         self._min_laser_value = 0
         self._scan_ranges = []
-        scan_high = np.full(360, self._max_laser_value)
-        scan_low = np.full(360, self._min_laser_value)
+        scan_high = np.full(360, self._max_laser_value, dtype=np.float32)
+        scan_low = np.full(360, self._min_laser_value, dtype=np.float32)
 
         # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
         amcl_pose_high = np.array([384, 384, 1.0], dtype=np.float32)
@@ -49,7 +49,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         num_actions = 3
         self.action_space = spaces.Discrete(num_actions)
         self.reward_range = (-np.inf, np.inf)
-        self.observation_space = spaces.Box(scan_low, scan_high)
+        self.observation_space = spaces.Box(scan_low, scan_high, dtype=np.float32)
 
         # code related to motion commands
         self._motion_error = 0.05
@@ -61,7 +61,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._angular_speed = 0.75
         self._last_action = None
         self._forward_reward = 0.1
-        self._turn_reward = 0.05
+        self._turn_reward = 0.01
 
         self._dist_threshold = 10.0
         self._ent_threshold = -1.0
@@ -300,8 +300,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             config_params = {
                         'max_particles' : particles,
                      }
-            config = client.update_configuration(config_params)
-
+            #config = client.update_configuration(config_params)    # hard coded directly in launch file
             self._init_global_localization()
 
         rospy.logdebug('status: amcl initialized')
@@ -335,6 +334,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._success_episode = False
         self._cumulated_reward.clear()
         self._last_action = None
+
+        time.sleep(0.5) # wait for small time before starting environment
 
     def _get_obs(self):
         """
