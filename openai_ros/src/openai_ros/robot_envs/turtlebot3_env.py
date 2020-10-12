@@ -11,7 +11,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         TurtleBot3Env class acts as abstract turtlebot environment template
     """
 
-    def __init__(self):
+    def __init__(self, reset_type = 'SIMULATION'):
         """
         Initialize TurtleBot3Env class
 
@@ -25,7 +25,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         """
 
-        super(TurtleBot3Env, self).__init__(reset_type = 'SIMULATION')
+        super(TurtleBot3Env, self).__init__(reset_type = reset_type)
 
         self._laser_scan = None
         self._imu_data = None

@@ -32,7 +32,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         ----------
 
         """
-        super(TurtleBot3LocalizeEnv, self).__init__()
+        super(TurtleBot3LocalizeEnv, self).__init__(reset_type = 'WORLD')
 
         # TODO: need to get variable values from config file
 
@@ -56,14 +56,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._update_rate = 30
         self._init_linear_speed = 0.0
         self._init_angular_speed = 0.0
-        self._linear_forward_speed = 0.5
+        self._linear_forward_speed = 0.4
         self._linear_turn_speed = 0.05
         self._angular_speed = 0.75
         self._last_action = None
         self._forward_reward = 0.1
         self._turn_reward = 0.05
 
-        self._dist_threshold = 0.5
+        self._dist_threshold = 10.0
         self._ent_threshold = -1.0
 
         self._robot = Robot()
@@ -409,7 +409,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             else:
                 reward += self._turn_reward
 
-            self._cumulated_reward.append([dist_reward, entropy_reward])
+            self._cumulated_reward.append([self._amcl_pose.get_estimate_error(),
+                                           self._amcl_pose.get_entropy(),
+                                           self._amcl_pose.get_position(),
+                                           self._robot.get_pose().get_position()])
         if self._episode_done:
             rospy.logdebug("episode ended with {0} steps and {1}".format(self._current_step, np.asarray(self._cumulated_reward)))
 
@@ -477,7 +480,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                          self._motion_error, self._update_rate )
 
         self._last_action = action
-        rospy.loginfo('action: {0}'.format(action))
+        rospy.logdebug('action: {0}'.format(action))
 
     ###### private methods ######
 
