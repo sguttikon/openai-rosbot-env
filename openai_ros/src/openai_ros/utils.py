@@ -297,7 +297,7 @@ class Robot():
             'max_angle': 0.0,
             'end_sector': 0,
             'sector_color': self._f_space_color,
-            'threshold': self.__safe_distance + 0.2,
+            'threshold': self.__safe_distance + 0.3,
             'view_field': 90, # degrees
             'obstacle_sector': 0,
         }
@@ -448,8 +448,8 @@ class Robot():
                     self.__too_close = True
 
             if is_nearest:
-                xdata = [x, x + beam[0] * np.cos(yaw + beam[1]) / self.__map_scale]
-                ydata = [y, y + beam[0] * np.sin(yaw + beam[1]) / self.__map_scale]
+                xdata = [x, x + beam[0] * np.cos(beam[1]) / self.__map_scale]
+                ydata = [y, y + beam[0] * np.sin(beam[1]) / self.__map_scale]
                 scan_beams.append([xdata, ydata])
             else:
                 scan_beams.append([[x, x], [y, y]])

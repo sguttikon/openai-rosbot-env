@@ -35,12 +35,21 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         super(TurtleBot3LocalizeEnv, self).__init__()
 
         # TODO: need to get variable values from config file
+
+        # for laser scan
+        self._max_laser_value = 6
+        self._min_laser_value = 0
+        self._scan_ranges = []
+        scan_high = np.full(360, self._max_laser_value)
+        scan_low = np.full(360, self._min_laser_value)
+
+        # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
+        amcl_pose_high = np.array([384, 384, 1.0], dtype=np.float32)
+
         num_actions = 3
         self.action_space = spaces.Discrete(num_actions)
         self.reward_range = (-np.inf, np.inf)
-        # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
-        high = np.array([384, 384, 1.0], dtype=np.float32)
-        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
+        self.observation_space = spaces.Box(scan_low, scan_high)
 
         # code related to motion commands
         self._motion_error = 0.05
@@ -49,9 +58,13 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._init_angular_speed = 0.0
         self._linear_forward_speed = 0.5
         self._linear_turn_speed = 0.05
-        self._angular_speed = 0.4
-        self._dist_threshold = 0.1
-        self._ent_threshold = -1.5
+        self._angular_speed = 0.75
+        self._last_action = None
+        self._forward_reward = 0.1
+        self._turn_reward = 0.05
+
+        self._dist_threshold = 0.5
+        self._ent_threshold = -1.0
 
         self._robot = Robot()
         self._sector_angle = self._robot._sector_angle
@@ -63,6 +76,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._current_step = 0
         self._max_steps = 100
         self._abort_episode = False
+        self._success_episode = False
+        self._cumulated_reward = []
 
         # all sensor data, topic messages is assumed to be in same tf frame
         self._global_frame_id = 'map'
@@ -289,7 +304,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
             self._init_global_localization()
 
-        rospy.loginfo('status: amcl initialized')
+        rospy.logdebug('status: amcl initialized')
 
     def _init_global_localization(self):
         """
@@ -317,6 +332,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._episode_done = False
         self._current_step = 0
         self._abort_episode = False
+        self._success_episode = False
+        self._cumulated_reward.clear()
+        self._last_action = None
 
     def _get_obs(self):
         """
@@ -331,7 +349,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # return {
         #     'particle_cloud' : self._particle_cloud
         # }
-        return self._amcl_pose.get_position()
+        #return self._amcl_pose.get_position()
+        return np.asarray(self._scan_ranges)
 
 
     def _is_done(self):
@@ -358,7 +377,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             ):
             # episode done if within distance threshold range with smallest entropy
             # or max steps elapsed
-            self._episode_done = True
+            self._success_episode = self._episode_done = True
         else:
             self._episode_done = False
 
@@ -371,19 +390,28 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
 
         if self._collision_action:
-            reward = -0.1
+            reward = -0.01
         elif self._abort_episode:
             # penalty
-            reward = -5.0
-        elif self._episode_done:
+            reward = -0.5
+        elif self._success_episode:
             # bonus reward if successful
-            reward = 10.0
+            reward = 5.0
         else:
             # to avoid division by zero
             #   sqr_error: error is always positive best value 0.0
             #   entropy: assuming 10e^-9 precision best value -5.0
-            reward = 1/(self._amcl_pose.get_estimate_error() - self._dist_threshold + 1) + \
-                    1/(self._amcl_pose.get_entropy() - self._ent_threshold + 5)
+            dist_reward = 1 / (self._amcl_pose.get_estimate_error() - self._dist_threshold + 1)
+            entropy_reward = 1 / (self._amcl_pose.get_entropy() - self._ent_threshold + 5)
+            reward = dist_reward + entropy_reward
+            if self._last_action == 0:
+                reward += self._forward_reward
+            else:
+                reward += self._turn_reward
+
+            self._cumulated_reward.append([dist_reward, entropy_reward])
+        if self._episode_done:
+            rospy.logdebug("episode ended with {0} steps and {1}".format(self._current_step, np.asarray(self._cumulated_reward)))
 
         return reward
 
@@ -424,7 +452,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 angular_speed = 0.0
             else:
                 # obstacle in front sector
-                rospy.logwarn('action: 0 not executed, will hit obstacle')
+                rospy.logdebug('action: 0 not executed, will hit obstacle')
                 self._collision_action = True
         elif action == 1:   # turn left
             if left_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
@@ -432,7 +460,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 angular_speed = self._angular_speed
             else:
                 # obstacle in left or back sector
-                rospy.logwarn('action: 1 not executed, will hit obstacle')
+                rospy.logdebug('action: 1 not executed, will hit obstacle')
                 self._collision_action = True
         elif action == 2:   # turn right
             if right_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
@@ -440,13 +468,16 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 angular_speed = -1 * self._angular_speed
             else:
                 # obstacle in right or back sector
-                rospy.logwarn('action: 2 not executed, will hit obstacle')
+                rospy.logdebug('action: 2 not executed, will hit obstacle')
                 self._collision_action = True
         else:   # do nothing / stop
             pass
 
         self._move_base( linear_speed, angular_speed,
                          self._motion_error, self._update_rate )
+
+        self._last_action = action
+        rospy.loginfo('action: {0}'.format(action))
 
     ###### private methods ######
 
@@ -800,7 +831,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     collision_idx = idx//self._sector_angle
                     if lrange < self._sector_laser_scan[collision_idx][0]:
                         self._sector_laser_scan[collision_idx][0] = lrange
-                        self._sector_laser_scan[collision_idx][1] = langle - gt_a
+                        self._sector_laser_scan[collision_idx][1] = langle
             else:
                 # show scan w.r.t groundtruth pose
                 self._check_gazebo_data_is_ready()  # get latest _gt_pose
@@ -809,11 +840,19 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 scale = self._map_data.get_scale()
 
                 collision_idx = 0
+                self._scan_ranges.clear()
                 self._sector_laser_scan[:, ...].fill(np.inf)
                 for idx in range(len(scan_msg.ranges)):
                     lrange = scan_msg.ranges[idx]
                     if np.isinf(lrange):
+                        self._scan_ranges.append(self._max_laser_value)
                         continue
+                    elif np.isnan(lrange):
+                        self._scan_ranges.append(self._min_laser_value)
+                        continue
+                    else:
+                        self._scan_ranges.append(lrange)
+
                     # if beam hits obstacle, store bean endpoint
                     langle = gt_a + scan_msg.angle_min + ( idx * scan_msg.angle_increment )
                     x = gt_x + lrange * np.cos(langle) / scale
@@ -824,7 +863,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     collision_idx = idx//self._sector_angle
                     if lrange < self._sector_laser_scan[collision_idx][0]:
                         self._sector_laser_scan[collision_idx][0] = lrange
-                        self._sector_laser_scan[collision_idx][1] = langle - gt_a
+                        self._sector_laser_scan[collision_idx][1] = langle
 
         scan_points = np.asarray(scan_points)
         return scan_points
