@@ -9,6 +9,14 @@ Operating System - Ubuntu 20.04 (Focal)  <br>
 Python Distribution - Python 3.X <br>
 Gym - [doc](https://gym.openai.com/docs/)
 
+#### Steps: 
+
+- create gazebo environment
+  1. convert layout xxx.png to occupancy map xxx.pgm using [layout_to_occpmap.py](https://github.com/suresh-guttikonda/openai-rosbot-env/blob/master/gazebo_models/indoor_layouts/src/layout_to_occpmap.py) <br>
+  2. create corresponding xxx.yaml for occupancy map as [sample](https://github.com/suresh-guttikonda/openai-rosbot-env/tree/master/gazebo_models/indoor_layouts/map/sample)
+  3. read the map and publish using command === rosrun map_server map_server xxx.yaml ===
+  4. run map2gazebo using command === roslaunch map2gazebo map2gazebo.launch export_dir:=/path/to/export_dir === to read published map and create stl/dae based on map layout
+  ##### Note: above occupany map is used only to generate dae/stl gazebo environment, for localization task we still use occupancy map generated from APIs like gmapping
 
 ### References:
 
@@ -26,3 +34,4 @@ Gym - [doc](https://gym.openai.com/docs/)
 #### Notes:
 * configure #export TURTLEBOT3_MODEL=waffle in .bashrc file
 * assumption is all sensor data, poses, etc are in same frame ie. 'map'
+* fix for map2gazebo utf encoding error is to change lines open(export_dir + "/map.stl", 'w') => open(export_dir + "/map.stl", 'wb')
