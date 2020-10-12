@@ -5,6 +5,7 @@ from openai_ros import rosbot_gazebo_env
 from sensor_msgs.msg import LaserScan, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+import time
 
 class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
     """
@@ -374,7 +375,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         cmd_vel_msg.angular.z = angular_speed
         self._check_cmd_vel_pub_ready()
         self._cmd_vel_pub.publish(cmd_vel_msg)
-        rospy.sleep(0.2)
+        time.sleep(0.2)
         # wait for the given twist message to be executed correctly
         delta = self._wait_until_twist_achieved(cmd_vel_msg, motion_error, update_rate)
 

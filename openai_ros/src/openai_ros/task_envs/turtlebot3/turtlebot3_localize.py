@@ -17,6 +17,7 @@ from matplotlib.patches import Wedge
 from matplotlib.patches import Ellipse
 from matplotlib import transforms
 import numpy as np
+import time
 
 class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
     """
@@ -335,7 +336,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._cumulated_reward.clear()
         self._last_action = None
 
-        time.sleep(0.5) # wait for small time before starting environment
+        time.sleep(1.0) # wait for small time before starting environment
 
     def _get_obs(self):
         """
