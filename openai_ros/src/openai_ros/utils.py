@@ -260,13 +260,14 @@ class Robot():
         self._f_space_color = 'lightgrey'
         self._o_space_color = 'lightcoral'
         self.__pose = Pose()
+        self.__safe_distance = 0.3
         self.__left_details = {
             'min_angle': 0.0,
             'start_sector': 0,
             'max_angle': 0.0,
             'end_sector': 0,
             'sector_color': self._f_space_color,
-            'threshold': 0.4,
+            'threshold': self.__safe_distance + 0.1,
             'view_field': 90, # degrees
             'obstacle_sector': 0,
         }
@@ -276,7 +277,7 @@ class Robot():
             'max_angle': 0.0,
             'end_sector': 0,
             'sector_color': self._f_space_color,
-            'threshold': 0.3,
+            'threshold': self.__safe_distance,
             'view_field': 90, # degrees
             'obstacle_sector': 0,
         }
@@ -286,7 +287,7 @@ class Robot():
             'max_angle': 0.0,
             'end_sector': 0,
             'sector_color': self._f_space_color,
-            'threshold': 0.4,
+            'threshold': self.__safe_distance + 0.1,
             'view_field': 90, # degrees
             'obstacle_sector': 0,
         }
@@ -296,7 +297,7 @@ class Robot():
             'max_angle': 0.0,
             'end_sector': 0,
             'sector_color': self._f_space_color,
-            'threshold': 0.6,
+            'threshold': self.__safe_distance + 0.2,
             'view_field': 90, # degrees
             'obstacle_sector': 0,
         }
@@ -305,6 +306,7 @@ class Robot():
         self._sector_angle = 15 # degrees
         self.__scan_beams = None
         self.__map_scale = 1.0
+        self.__too_close = False
 
         self.__left_details['start_sector'] = (self.__front_details['view_field']/2) // self._sector_angle
         self.__left_details['end_sector'] = (self.__front_details['view_field']/2 + \
@@ -349,6 +351,8 @@ class Robot():
     def get_surroundings(self):
         """
         Gets the robot surroundings
+
+        :return dict
         """
         return self.__surroundings
 
@@ -356,9 +360,17 @@ class Robot():
         """
         Gets the scan beams
 
-        :param numpy.ndarray
+        :return numpy.ndarray
         """
         return self.__scan_beams
+
+    def get_too_close(self):
+        """
+        Gets the too close to obstacle flag value
+
+        :return bool
+        """
+        return self.__too_close
 
     def update_surroundings(self, sector_laser_scan):
         """
@@ -394,6 +406,7 @@ class Robot():
         self.__front_details['sector_color'] = self._f_space_color
         self.__front_details['obstacle_sector'] = 0
 
+        self.__too_close = False
         scan_beams = []
         # check for nearest obstacles in sectors
         for idx in range(len(sector_laser_scan)):
@@ -409,6 +422,8 @@ class Robot():
                 self.__left_details['sector_color'] = self._o_space_color
                 self.__left_details['obstacle_sector'] = 1
                 is_nearest = True
+                if beam[0] < self.__safe_distance:
+                    self.__too_close = True
             elif idx >= self.__back_details['start_sector'] \
                     and idx <= self.__back_details['end_sector'] \
                     and beam[0] < self.__back_details['threshold']:
@@ -421,12 +436,16 @@ class Robot():
                 self.__right_details['sector_color'] = self._o_space_color
                 self.__right_details['obstacle_sector'] = 1
                 is_nearest = True
+                if beam[0] < self.__safe_distance:
+                    self.__too_close = True
             elif (idx >= self.__front_details['start_sector'] \
                     or idx <= self.__front_details['end_sector']) \
                     and beam[0] < self.__front_details['threshold']:
                 self.__front_details['sector_color'] = self._o_space_color   # for front sector logic is different
                 self.__front_details['obstacle_sector'] = 1
                 is_nearest = True
+                if beam[0] < self.__safe_distance:
+                    self.__too_close = True
 
             if is_nearest:
                 xdata = [x, x + beam[0] * np.cos(yaw + beam[1]) / self.__map_scale]

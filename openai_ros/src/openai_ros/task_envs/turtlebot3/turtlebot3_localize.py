@@ -21,6 +21,7 @@ import numpy as np
 class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
     """
         TurtleBot3LocalizeEnv class is an implementation for localization of turtlebot3 task
+        Goal is to become more certain about the position of turtlebot3
     """
 
     def __init__(self):
@@ -32,6 +33,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
         super(TurtleBot3LocalizeEnv, self).__init__()
+
+        # TODO: need to get variable values from config file
+        num_actions = 3
+        self.action_space = spaces.Discrete(num_actions)
+        self.reward_range = (-np.inf, np.inf)
+        # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
+        high = np.array([384, 384, 1.0], dtype=np.float32)
+        self.observation_space = spaces.Box(-high, high, dtype=np.float32)
 
         # code related to motion commands
         self._motion_error = 0.05
@@ -52,7 +61,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._is_new_map = False
         self._episode_done = False
         self._current_step = 0
-        self._max_steps = 50
+        self._max_steps = 100
+        self._abort_episode = False
 
         # all sensor data, topic messages is assumed to be in same tf frame
         self._global_frame_id = 'map'
@@ -270,7 +280,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             # TODO: do we need selective resampling ??
 
             # dynamic reconfigure
-            particles = 20000
+            particles = 10000   # Note: only max 10000 is getting accepted
             client = dynamic_reconfig.Client('/amcl')
             config_params = {
                         'max_particles' : particles,
@@ -306,6 +316,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         self._episode_done = False
         self._current_step = 0
+        self._abort_episode = False
 
     def _get_obs(self):
         """
@@ -317,9 +328,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # update the surroundings of the robot
         self._robot.update_surroundings(self._sector_laser_scan)
 
-        return {
-            'particle_cloud' : self._particle_cloud
-        }
+        # return {
+        #     'particle_cloud' : self._particle_cloud
+        # }
+        return self._amcl_pose.get_position()
 
 
     def _is_done(self):
@@ -332,11 +344,13 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         back_details = self._robot.get_surroundings()['back']
         right_details = self._robot.get_surroundings()['right']
         front_details = self._robot.get_surroundings()['front']
-        if front_details['obstacle_sector'] == 1 and \
+        if self._robot.get_too_close() or (
+            front_details['obstacle_sector'] == 1 and \
             back_details['obstacle_sector'] == 1 and \
-            (left_details['obstacle_sector'] == 1 or right_details['obstacle_sector'] == 1):
-            # episode done if robot is stuck
-            self._episode_done = True
+                (left_details['obstacle_sector'] == 1 or \
+                    right_details['obstacle_sector'] == 1)):
+            # abort episode if robot is stuck or too close to obstacle
+            self._abort_episode = self._episode_done = True
         elif self._current_step > self._max_steps or \
             ( self._amcl_pose.get_estimate_error() < self._dist_threshold and \
                  ( np.isinf(self._amcl_pose.get_entropy()) or \
@@ -358,7 +372,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         if self._collision_action:
             reward = -0.1
-        elif done:
+        elif self._abort_episode:
+            # penalty
+            reward = -5.0
+        elif self._episode_done:
             # bonus reward if successful
             reward = 10.0
         else:
@@ -385,6 +402,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         * 2 = TurnRight
 
         """
+
+        if self._robot.get_too_close():
+            rospy.logwarn('too close obstacle episode will be terminated')
+            return
 
         # increment step counter
         self._current_step += 1
