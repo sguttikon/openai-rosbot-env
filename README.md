@@ -9,7 +9,7 @@ Operating System - Ubuntu 20.04 (Focal)  <br>
 Python Distribution - Python 3.X <br>
 Gym - [doc](https://gym.openai.com/docs/)
 
-#### Steps: 
+#### Steps:
 
 - create gazebo environment
   1. convert layout xxx.png to occupancy map xxx.pgm using [layout_to_occpmap.py](https://github.com/suresh-guttikonda/openai-rosbot-env/blob/master/gazebo_models/indoor_layouts/src/layout_to_occpmap.py) <br>
@@ -35,3 +35,4 @@ Gym - [doc](https://gym.openai.com/docs/)
 * configure #export TURTLEBOT3_MODEL=waffle in .bashrc file
 * assumption is all sensor data, poses, etc are in same frame ie. 'map'
 * fix for map2gazebo utf encoding error is to change lines open(export_dir + "/map.stl", 'w') => open(export_dir + "/map.stl", 'wb')
+* https://answers.gazebosim.org//question/16397/roslaunch-gazebo-2-process-has-died-pid-7605-exit-code-139/ => this issue occuring sometime ** need to fix **

@@ -62,7 +62,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._angular_speed = 0.75
         self._last_action = None
         self._forward_reward = 0.1
-        self._turn_reward = 0.01
+        self._turn_reward = 0.02
 
         self._dist_threshold = 10.0
         self._ent_threshold = -1.0
