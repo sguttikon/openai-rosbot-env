@@ -2,10 +2,10 @@
 
 import rospy
 from openai_ros.robot_envs import turtlebot3_env
-from openai_ros.utils import Map, Pose, Robot
+from openai_ros import utils
 from gym import spaces
-from geometry_msgs.msg import PoseArray, PoseWithCovarianceStamped, PointStamped
-from gazebo_msgs.msg import ModelStates
+from geometry_msgs.msg import *
+from gazebo_msgs.msg import ModelStates, ModelState
 from sensor_msgs.msg import LaserScan
 from std_srvs.srv import Empty
 from nav_msgs.srv import GetMap
@@ -67,7 +67,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._dist_threshold = 10.0
         self._ent_threshold = -1.0
 
-        self._robot = Robot()
+        self._robot = utils.Robot()
         self._sector_angle = self._robot._sector_angle
         self._robot_radius = self._robot._robot_radius
         self._sector_laser_scan = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
@@ -244,6 +244,12 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         self._check_publisher_is_ready(self._init_pose_pub)
 
+    def _check_gazebo_pose_pub_ready(self):
+        """
+        Checks gazebo pose publisher is operational
+        """
+        self._check_publisher_is_ready(self._gazebo_pose_pub)
+
     def _check_map_data_is_ready(self):
         """
         Checks map service is operational
@@ -323,7 +329,34 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._move_base( self._init_linear_speed, self._init_angular_speed,
                          self._motion_error, self._update_rate )
 
+        self._publish_rnd_init_pose()
+
         self._init_amcl(is_global=True)
+
+    def _publish_rnd_init_pose(self):
+        """
+        Publish the uniform random initial pose of robot
+        """
+        
+        # publish modelstate message
+        state_msg = ModelState()
+        state_msg.model_name = 'turtlebot3'
+
+        # TODO: position also need to be random
+        # uniform random position
+        state_msg.pose.position.x = 0.0
+        state_msg.pose.position.y = -1.0
+
+        # uniform random orientation
+        quaternion = quaternion_from_euler(0.0, 0.0, np.random.random() * 2 * np.pi)
+        state_msg.pose.orientation.x = quaternion[0]
+        state_msg.pose.orientation.y = quaternion[1]
+        state_msg.pose.orientation.z = quaternion[2]
+        state_msg.pose.orientation.w = quaternion[3]
+
+        self._check_gazebo_pose_pub_ready()
+        self._gazebo_pose_pub.publish(state_msg)
+        time.sleep(0.2)
 
     def _init_env_variables(self):
         """
@@ -733,7 +766,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
 
         # initialize pose
-        pose = Pose()
+        pose = utils.Pose()
         pose.set_position(
             pose_msg.position.x,
             pose_msg.position.y,
@@ -756,7 +789,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
 
         # initialize map
-        map = Map()
+        map = utils.Map()
         map.set_scale(msg_map.info.resolution)
         map.set_size(msg_map.info.width, msg_map.info.height)
         map.set_origin(self.__process_pose_msg(msg_map.info.origin))

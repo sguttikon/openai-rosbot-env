@@ -1,17 +1,22 @@
 <launch>
-  <arg name="world_file" default="$(find indoor_layouts)/worlds/sample.sdf"/>
+  <arg name="debug" default="false"/>
   <arg name="gui" default="true"/>
+  <arg name="paused" value="false"/>
+  <arg name="use_sim_time" value="true"/>
+  <arg name="headless" default="false"/>
+  <arg name="verbose" default="false"/>
+  <arg name="world_file" default="$(find indoor_layouts)/worlds/sample.sdf"/>
   <env name="GAZEBO_MODEL_PATH" value="$(find indoor_layouts)/models:$(optenv GAZEBO_MODEL_PATH)" />
 
   <!-- Start Gazebo with a blank world -->
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
-    <arg name="debug" value="true" />
+    <arg name="debug" value="$(arg debug)" />
     <arg name="gui" value="$(arg gui)" />
-    <arg name="paused" value="false"/>
-    <arg name="use_sim_time" value="true"/>
-    <arg name="headless" value="true"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="headless" value="$(arg headless)"/>
     <arg name="world_name" value="$(arg world_file)"/>
-    <arg name="verbose" value="true"/>
+    <arg name="verbose" value="$(arg verbose)"/>
   </include>
 
 </launch>

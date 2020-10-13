@@ -5,6 +5,7 @@ from openai_ros import rosbot_gazebo_env
 from sensor_msgs.msg import LaserScan, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
+from gazebo_msgs.msg import ModelState
 import time
 
 class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
@@ -57,6 +58,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         self._cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
         self._init_pose_pub = rospy.Publisher('/initialpose', PoseWithCovarianceStamped, queue_size = 1)
+        self._gazebo_pose_pub = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size = 1)
 
         self._check_publishers_connection()
         self.gazebo.pause_sim()
@@ -122,6 +124,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
         self._check_cmd_vel_pub_ready()
         self._check_init_pose_pub_ready()
+        self._check_gazebo_pose_pub_ready()
 
     def _check_cmd_vel_pub_ready(self):
         """
@@ -140,6 +143,12 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
     	Checks initial pose publisher is operational
     	"""
     	pass
+
+    def _check_gazebo_pose_pub_ready(self):
+        """
+        Check gazebo pose publisher is operational
+        """
+        pass
 
     def _check_all_sensors_are_ready(self):
         """
