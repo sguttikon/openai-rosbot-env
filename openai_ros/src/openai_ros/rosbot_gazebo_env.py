@@ -38,8 +38,6 @@ class RosbotGazeboEnv(gym.Env):
 
         # reset the gazebo simulation
         self._reset_sim()
-        # set environment variables each time we reset
-        self._init_env_variables()
         # get latest observation
         obs = self._get_obs()
         rospy.loginfo('status: environment is reset')
@@ -54,6 +52,7 @@ class RosbotGazeboEnv(gym.Env):
         # initiate node shutdown
         rospy.signal_shutdown('closing RosbotGazeboEnv')
         rospy.loginfo('status: environment is closed')
+        rospy.loginfo('======================================')
 
     def render(self):
         """
@@ -115,6 +114,8 @@ class RosbotGazeboEnv(gym.Env):
 
         # reset the gazebo
         self.gazebo.reset_sim()
+        # set environment variables each time we reset
+        self._init_env_variables()
 
         # check if everything working fine after reset
         self.gazebo.unpause_sim()

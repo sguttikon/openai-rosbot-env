@@ -36,6 +36,7 @@ class GazeboConnection():
 
         """
 
+        rospy.logdebug('GazeboConnection.reset_sim() start')
         if self._reset_type == 'SIMULATION':
             # reset the entire simulation including the time
             service_name = '/gazebo/reset_simulation'

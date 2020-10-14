@@ -102,6 +102,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._scan_plt = None
 
         rospy.loginfo('status: TurtleBot3LocalizeEnv is ready')
+        rospy.loginfo('======================================')
 
     def render(self, mode='human'):
         """
@@ -157,6 +158,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Checks amcl topics are operational
         """
 
+        rospy.logdebug('TurtleBot3LocalizeEnv._check_amcl_data_is_ready() start')
         topic_name = '/particlecloud'
         topic_class = PoseArray
         time_out = 5.0
@@ -187,6 +189,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Checks gazebo topic is operational
         """
 
+        rospy.logdebug('TurtleBot3LocalizeEnv._check_gazebo_data_is_ready() start')
         topic_name = '/gazebo/model_states'
         topic_class = ModelStates
         time_out = 1.0
@@ -208,6 +211,15 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Override turtlebot3 environment _laser_scan_callback() with custom logic
         """
+        rospy.logdebug('TurtleBot3LocalizeEnv._laser_scan_callback() start')
+        pass    # do nothing
+
+    def _odom_data_callback(self, data):
+        """
+        Override turtlebot3 environment _odom_data_callback() with custom logic
+        """
+
+        rospy.logdebug('TurtleBot3LocalizeEnv._odom_data_callback() start')
         pass    # do nothing
 
     def _check_laser_scan_is_ready(self):
@@ -215,6 +227,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Override turtlebot3 environment _check_laser_scan_is_ready() with custom logic
         """
 
+        rospy.logdebug('TurtleBot3LocalizeEnv._check_laser_scan_is_ready() start')
         topic_name = '/scan'
         topic_class = LaserScan
         time_out = 1.0
@@ -227,12 +240,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Checks initial pose publisher is operational
         """
+        rospy.logdebug('TurtleBot3LocalizeEnv._check_init_pose_pub_ready() start')
         self._check_publisher_is_ready(self._init_pose_pub)
 
     def _check_gazebo_pose_pub_ready(self):
         """
         Checks gazebo pose publisher is operational
         """
+        rospy.logdebug('TurtleBot3LocalizeEnv._check_gazebo_pose_pub_ready() start')
         self._check_publisher_is_ready(self._gazebo_pose_pub)
 
     def _check_map_data_is_ready(self):
@@ -240,6 +255,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Checks map service is operational
         """
 
+        rospy.logdebug('TurtleBot3LocalizeEnv._check_map_data_is_ready() start')
         service_name = '/static_map'
         service_class = GetMap
         msg = self._call_service(service_name, service_class)
@@ -316,6 +332,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Set the initial pose of the turtlebot3
         """
 
+        rospy.logdebug('TurtleBot3LocalizeEnv._set_init_pose() start')
         self._move_base( self._robotmotion._init_linear_speed, self._robotmotion._init_angular_speed,
                          self._robotmotion._motion_error, self._robotmotion._update_rate )
 
@@ -348,6 +365,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Initialize environment variables
         """
+
+        rospy.logdebug('TurtleBot3LocalizeEnv._init_env_variables() start')
         self._episode_done = False
         self._current_step = 0
         self._abort_episode = False
@@ -369,6 +388,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Return the observation from the environment
         """
+
+        rospy.logdebug('TurtleBot3LocalizeEnv._get_obs() start')
         sqr_dist_err = self.__estimate_pose_error(self._robot.get_pose(), self._amcl_pose)
         self._amcl_pose.set_estimate_error(sqr_dist_err)
 

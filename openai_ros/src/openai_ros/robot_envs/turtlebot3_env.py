@@ -56,9 +56,9 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         rospy.Subscriber('/imu', Imu, self._imu_data_callback)
         rospy.Subscriber('/odom', Odometry, self._odom_data_callback)
 
-        self._cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 1)
-        self._init_pose_pub = rospy.Publisher('/initialpose', PoseWithCovarianceStamped, queue_size = 1)
-        self._gazebo_pose_pub = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size = 1)
+        self._cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size = 5)
+        self._init_pose_pub = rospy.Publisher('/initialpose', PoseWithCovarianceStamped, queue_size = 5)
+        self._gazebo_pose_pub = rospy.Publisher('/gazebo/set_model_state', ModelState, queue_size = 5)
 
         self._check_publishers_connection()
         self.gazebo.pause_sim()
@@ -109,6 +109,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Checks all sensors and other simulation systems are operational
         """
 
+        rospy.logdebug('TurtleBot3Env._check_all_systems_are_ready() start')
         if self._request_map:
             self._check_map_data_is_ready()
         if self._request_amcl:
@@ -122,6 +123,8 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
         Checks all publishers are operational
         """
+
+        rospy.logdebug('TurtleBot3Env._check_publishers_connection() start')
         self._check_cmd_vel_pub_ready()
         self._check_init_pose_pub_ready()
         self._check_gazebo_pose_pub_ready()
@@ -130,24 +133,28 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
         Checks command velocity publisher is operational
         """
+        rospy.logdebug('TurtleBot3Env._check_cmd_vel_pub_ready() start')
         self._check_publisher_is_ready(self._cmd_vel_pub)
 
     def _check_map_data_is_ready(self):
         """
         Checks map service is operational
         """
+        rospy.logdebug('TurtleBot3Env._check_map_data_is_ready() start')
         pass
 
     def _check_init_pose_pub_ready(self):
-    	"""
-    	Checks initial pose publisher is operational
-    	"""
-    	pass
+        """
+        Checks initial pose publisher is operational
+        """
+        rospy.logdebug('TurtleBot3Env._check_init_pose_pub_ready() start')
+        pass
 
     def _check_gazebo_pose_pub_ready(self):
         """
         Check gazebo pose publisher is operational
         """
+        rospy.logdebug('TurtleBot3Env._check_gazebo_pose_pub_ready() start')
         pass
 
     def _check_all_sensors_are_ready(self):
@@ -155,6 +162,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Checks all sensors are operational
         """
 
+        rospy.logdebug('TurtleBot3Env._check_all_sensors_are_ready() start')
         if self._request_laser:
             self._check_laser_scan_is_ready()
         if self._request_imu:
@@ -166,12 +174,14 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
         Checks amcl topic is operational
         """
+        rospy.logdebug('TurtleBot3Env._check_amcl_data_is_ready() start')
         pass
 
     def _check_gazebo_data_is_ready(self):
         """
         Checks gazebo topic is operational
         """
+        rospy.logdebug('TurtleBot3Env._check_gazebo_data_is_ready() start')
         pass
 
     def _check_laser_scan_is_ready(self):
@@ -184,6 +194,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             Message
         """
 
+        rospy.logdebug('TurtleBot3Env._check_laser_scan_is_ready() start')
         topic_name = '/scan'
         topic_class = LaserScan
         time_out = 1.0
@@ -200,6 +211,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             Message
         """
 
+        rospy.logdebug('TurtleBot3Env._check_imu_data_is_ready() start')
         topic_name = '/imu'
         topic_class = Imu
         time_out = 5.0
@@ -216,6 +228,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             Message
         """
 
+        rospy.logdebug('TurtleBot3Env._check_odom_data_is_ready() start')
         topic_name = '/odom'
         topic_class = Odometry
         time_out = 5.0
@@ -258,7 +271,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         return response
 
-    def _check_publisher_is_ready(self, publisher):
+    def _check_publisher_is_ready(self, publisher, max_retry: int = 10):
         """
         Check whether publisher is operational by checking the number of connections
 
@@ -266,17 +279,23 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         ----------
         publisher:
             publisher instance
+        max_retry: int
+            maximum number of times to retry checking the publisher connections
         """
 
         # TODO: do we need to add max retry limit ??
-
+        counter = 0
         rate = rospy.Rate(10) # 10hz
         while publisher.get_num_connections() == 0 and not rospy.is_shutdown():
-            try:
-                rate.sleep()
-            except rospy.ROSInterruptException as e:
-                # do nothing
-                pass
+            if counter < max_retry:
+                try:
+                    rate.sleep()
+                except rospy.ROSInterruptException as e:
+                    counter += 1
+            else:
+                # max retry count reached
+                rospy.logerr('publisher is not ready')
+                break
 
     def _call_service(self, service_name: str, service_class, max_retry: int = 10):
         """
@@ -334,6 +353,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             data received from laser scan topic
         """
 
+        rospy.logdebug('TurtleBot3Env._laser_scan_callback() start')
         self._laser_scan = data
 
     def _imu_data_callback(self, data):
@@ -346,6 +366,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             data received from imu topic
         """
 
+        rospy.logdebug('TurtleBot3Env._imu_data_callback() start')
         self._imu_data = data
 
     def _odom_data_callback(self, data):
@@ -358,6 +379,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             data received from odom topic
         """
 
+        rospy.logdebug('TurtleBot3Env._odom_data_callback() start')
         self._odom_data = data
 
     def _move_base(self, linear_speed: float, angular_speed: float,
@@ -378,6 +400,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         """
 
+        rospy.logdebug('TurtleBot3Env._move_base() start')
         # publish twist message
         cmd_vel_msg = Twist()
         cmd_vel_msg.linear.x = linear_speed
@@ -415,6 +438,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             time taken to achieve required twist (in seconds)
         """
 
+        rospy.logdebug('TurtleBot3Env._wait_until_twist_achieved() start')
         # compute the acceptable ranges for linear and angular velocity
         min_linear_speed = cmd_vel_msg.linear.x - motion_error
         max_linear_speed = cmd_vel_msg.linear.x + motion_error
