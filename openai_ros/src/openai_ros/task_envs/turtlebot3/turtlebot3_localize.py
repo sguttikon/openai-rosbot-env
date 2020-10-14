@@ -417,15 +417,16 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             back_details['obstacle_sector'] == 1 and \
                 (left_details['obstacle_sector'] == 1 or \
                     right_details['obstacle_sector'] == 1)):
-            # abort episode if robot is stuck or too close to obstacle
+            # abort episode if robot is stuck (atleast 3 direction has obstacles)
+            # or too close to obstacle
             self._abort_episode = self._episode_done = True
-        elif self._current_step > self._max_steps or \
-            ( self._amcl_pose.get_estimate_error() < self._dist_threshold and \
+        elif self._current_step > self._max_steps:
+            # episode done if max steps elapsed
+            self._episode_done = True
+        elif self._amcl_pose.get_estimate_error() < self._dist_threshold and \
                  ( np.isinf(self._amcl_pose.get_entropy()) or \
-                     self._amcl_pose.get_entropy() < self._ent_threshold )
-            ):
-            # episode done if within distance threshold range with smallest entropy
-            # or max steps elapsed
+                     self._amcl_pose.get_entropy() < self._ent_threshold ):
+            # task successful if within distance threshold range and smallest entropy
             self._success_episode = self._episode_done = True
         else:
             # otherwise episode is not done yet
@@ -444,7 +445,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             reward = -0.01
         elif self._abort_episode:
             # penalty if stuck or too close to obstacle
-            reward = -0.5
+            reward = -1.0
         elif self._success_episode:
             # bonus reward if successful in task
             reward = 5.0
@@ -456,8 +457,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             entropy_reward = 1 / (self._amcl_pose.get_entropy() - self._ent_threshold + 5)
             reward = dist_reward + entropy_reward
             if self._last_action == 0:
+                # current action is go forward
                 reward += self._forward_reward
             else:
+                # current action is to turn
                 reward += self._turn_reward
 
             self._cumulated_reward.append([self._amcl_pose.get_estimate_error(),
