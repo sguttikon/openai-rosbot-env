@@ -246,6 +246,8 @@ class Pose():
         """
         return ' position: {0},\n orientation: {1},\n covariance: {2}'.format(self.__position, self.__euler, self.__covariance)
 
+#### Turtlebot3 ####
+
 class Robot():
     """
         Robot class is an implementation to store robot details
@@ -257,6 +259,10 @@ class Robot():
         """
         super(Robot, self).__init__()
 
+        self._rosbot_name = 'turtlebot3'
+        # all sensor data, topic messages is assumed to be in same tf frame
+        self._global_frame_id = 'map'
+        self._scan_frame_id = 'base_scan'
         self._f_space_color = 'lightgrey'
         self._o_space_color = 'lightcoral'
         self.__pose = Pose()
@@ -455,3 +461,38 @@ class Robot():
                 scan_beams.append([[x, x], [y, y]])
 
         self.__scan_beams = np.asarray(scan_beams)
+
+class LaserScan():
+    """
+        LaserScan class is an implementation to store laser scan details
+    """
+
+    def __init__(self):
+        """
+        Initialize LaserScan class
+        """
+        super(LaserScan, self).__init__()
+
+        self._max_laser_value = 6
+        self._min_laser_value = 0
+        self._scan_high = np.full(360, self._max_laser_value, dtype=np.float32)
+        self._scan_low = np.full(360, self._min_laser_value, dtype=np.float32)
+
+class RobotMotion():
+    """
+        RobotMotion class is an implementation to store robot motion details
+    """
+
+    def __init__(self):
+        """
+        Initialize RobotMotion class
+        """
+        super(RobotMotion, self).__init__()
+
+        self._motion_error = 0.05
+        self._update_rate = 30
+        self._init_linear_speed = 0.0
+        self._init_angular_speed = 0.0
+        self._linear_forward_speed = 0.4
+        self._linear_turn_speed = 0.05
+        self._angular_speed = 0.75

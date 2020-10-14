@@ -42,8 +42,8 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
 
         # env variables
         self._request_map = False
-        self._request_laser = True
-        self._request_odom = True
+        self._request_laser = False
+        self._request_odom = False
         self._request_imu = False
         self._request_amcl = False
         self._request_gazebo_data = False

@@ -110,6 +110,7 @@ class RosbotGazeboEnv(gym.Env):
         # pre-reset tasks
         self.gazebo.unpause_sim()
         self._check_all_systems_are_ready()
+        self._set_init_pose()
         self.gazebo.pause_sim()
 
         # reset the gazebo
@@ -117,7 +118,6 @@ class RosbotGazeboEnv(gym.Env):
 
         # check if everything working fine after reset
         self.gazebo.unpause_sim()
-        self._set_init_pose()
         self._check_all_systems_are_ready()
         self.gazebo.pause_sim()
 

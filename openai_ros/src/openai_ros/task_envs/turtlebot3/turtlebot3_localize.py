@@ -33,44 +33,40 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         ----------
 
         """
-        super(TurtleBot3LocalizeEnv, self).__init__(reset_type = 'WORLD')
+        super(TurtleBot3LocalizeEnv, self).__init__(reset_type = 'SIMULATION')
 
         # TODO: need to get variable values from config file
 
-        # for laser scan
-        self._max_laser_value = 6
-        self._min_laser_value = 0
+        # code related to  laser scan
         self._scan_ranges = []
-        scan_high = np.full(360, self._max_laser_value, dtype=np.float32)
-        scan_low = np.full(360, self._min_laser_value, dtype=np.float32)
+        self._laserscanner = utils.LaserScan()
 
         # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
-        amcl_pose_high = np.array([384, 384, 1.0], dtype=np.float32)
+        #amcl_pose_high = np.array([384, 384, 1.0], dtype=np.float32)
 
         num_actions = 3
         self.action_space = spaces.Discrete(num_actions)
         self.reward_range = (-np.inf, np.inf)
-        self.observation_space = spaces.Box(scan_low, scan_high, dtype=np.float32)
+        self.observation_space = spaces.Box(self._laserscanner._scan_low,
+                            self._laserscanner._scan_high, dtype=np.float32)
 
         # code related to motion commands
-        self._motion_error = 0.05
-        self._update_rate = 30
-        self._init_linear_speed = 0.0
-        self._init_angular_speed = 0.0
-        self._linear_forward_speed = 0.4
-        self._linear_turn_speed = 0.05
-        self._angular_speed = 0.75
+        self._robotmotion = utils.RobotMotion()
+
+        # code related to computing reward
         self._last_action = None
         self._forward_reward = 0.1
         self._turn_reward = 0.02
-
         self._dist_threshold = 10.0
         self._ent_threshold = -1.0
 
+        # fot turtlebot3
         self._robot = utils.Robot()
         self._sector_angle = self._robot._sector_angle
         self._robot_radius = self._robot._robot_radius
         self._sector_laser_scan = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
+        self._global_frame_id = self._robot._global_frame_id
+        self._scan_frame_id = self._robot._scan_frame_id
 
         self._is_new_map = False
         self._episode_done = False
@@ -79,19 +75,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._abort_episode = False
         self._success_episode = False
         self._cumulated_reward = []
-
-        # all sensor data, topic messages is assumed to be in same tf frame
-        self._global_frame_id = 'map'
-        self._scan_frame_id = 'base_scan'
         self._collision_action = False
-
-        # code realted to sensors
-        self._request_map = True
-        self._request_laser = True
-        self._request_odom = True
-        self._request_imu = False
-        self._request_amcl = True
-        self._request_gazebo_data = True
 
         # code related to displaying results in matplotlib
         fig = plt.figure(figsize=(7, 7))
@@ -164,7 +148,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         super(TurtleBot3LocalizeEnv, self).close()
 
-        # prevent plot from closing after environment is closed
+        # to prevent plot from closing after environment is closed
         plt.ioff()
         plt.show()
 
@@ -181,7 +165,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if particle_msg is not None:
             if particle_msg.header.frame_id != self._global_frame_id:
                 rospy.logwarn('received amcl particle cloud must be in the global frame')
-
+            # retrieve particle cloud of amcl
             self._particle_cloud = self.__process_particle_msg(particle_msg.poses)
 
         topic_name = '/amcl_pose'
@@ -192,7 +176,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         if pose_msg is not None:
             if pose_msg.header.frame_id != self._global_frame_id:
                 rospy.logwarn('received amcl pose must be in the global frame')
-
+            # retrieve pose estimate of amcl
             self._amcl_pose = self.__process_pose_cov_msg(pose_msg.pose)
             # rescale robot position
             x, y, z = self._amcl_pose.get_position() / self._map_data.get_scale()
@@ -211,9 +195,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # TODO: do we also need twist (velocity) of turtlebot ??
         # preprocess received data
         if data is not None:
-            rosbot_name = 'turtlebot3'
+            rosbot_name = self._robot._rosbot_name
             if rosbot_name in data.name:
                 turtlebot_idx = data.name.index(rosbot_name)
+                # retrieve ground truth pose from gazebo simulation
                 gt_pose = self.__process_pose_msg(data.pose[turtlebot_idx])
                 self._robot.set_pose(gt_pose, self._map_data.get_scale())
             else:
@@ -223,7 +208,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Override turtlebot3 environment _laser_scan_callback() with custom logic
         """
-        pass
+        pass    # do nothing
 
     def _check_laser_scan_is_ready(self):
         """
@@ -263,6 +248,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             rospy.logwarn('received map must be in the global frame')
 
         self._map_data = self.__process_map_msg(msg.map)
+
+        # every time map is received perfrom following
+        self._publish_rnd_init_pose()
+        self._init_amcl(is_global=True)
 
     def _init_amcl(self, is_global=True):
         """
@@ -307,7 +296,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             config_params = {
                         'max_particles' : particles,
                      }
-            #config = client.update_configuration(config_params)    # hard coded directly in launch file
+            # hard coded directly in launch file
+            #config = client.update_configuration(config_params)
             self._init_global_localization()
 
         rospy.logdebug('status: amcl initialized')
@@ -326,18 +316,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Set the initial pose of the turtlebot3
         """
 
-        self._move_base( self._init_linear_speed, self._init_angular_speed,
-                         self._motion_error, self._update_rate )
-
-        self._publish_rnd_init_pose()
-
-        self._init_amcl(is_global=True)
+        self._move_base( self._robotmotion._init_linear_speed, self._robotmotion._init_angular_speed,
+                         self._robotmotion._motion_error, self._robotmotion._update_rate )
 
     def _publish_rnd_init_pose(self):
         """
         Publish the uniform random initial pose of robot
         """
-        
+
         # publish modelstate message
         state_msg = ModelState()
         state_msg.model_name = 'turtlebot3'
@@ -369,6 +355,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._cumulated_reward.clear()
         self._last_action = None
 
+        # code realted to sensors data to access
+        self._request_map = True    # on reset request new map to set new pose, amcl, etc..
+        self._request_laser = True
+        self._request_odom = True
+        self._request_imu = False
+        self._request_amcl = True
+        self._request_gazebo_data = True
+
         time.sleep(1.0) # wait for small time before starting environment
 
     def _get_obs(self):
@@ -378,7 +372,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         sqr_dist_err = self.__estimate_pose_error(self._robot.get_pose(), self._amcl_pose)
         self._amcl_pose.set_estimate_error(sqr_dist_err)
 
-        # update the surroundings of the robot
+        # update the surroundings of the robot based on laser scan data
         self._robot.update_surroundings(self._sector_laser_scan)
 
         # return {
@@ -414,6 +408,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             # or max steps elapsed
             self._success_episode = self._episode_done = True
         else:
+            # otherwise episode is not done yet
             self._episode_done = False
 
         return self._episode_done
@@ -425,12 +420,13 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
 
         if self._collision_action:
+            # negative reward for bad action choice
             reward = -0.01
         elif self._abort_episode:
-            # penalty
+            # penalty if stuck or too close to obstacle
             reward = -0.5
         elif self._success_episode:
-            # bonus reward if successful
+            # bonus reward if successful in task
             reward = 5.0
         else:
             # to avoid division by zero
@@ -486,7 +482,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         if action == 0:     # move forward
             if front_details['obstacle_sector'] == 0:
-                linear_speed = self._linear_forward_speed
+                linear_speed = self._robotmotion._linear_forward_speed
                 angular_speed = 0.0
             else:
                 # obstacle in front sector
@@ -494,16 +490,16 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 self._collision_action = True
         elif action == 1:   # turn left
             if left_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
-                linear_speed = self._linear_turn_speed
-                angular_speed = self._angular_speed
+                linear_speed = self._robotmotion._linear_turn_speed
+                angular_speed = self._robotmotion._angular_speed
             else:
                 # obstacle in left or back sector
                 rospy.logdebug('action: 1 not executed, will hit obstacle')
                 self._collision_action = True
         elif action == 2:   # turn right
             if right_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
-                linear_speed = self._linear_turn_speed
-                angular_speed = -1 * self._angular_speed
+                linear_speed = self._robotmotion._linear_turn_speed
+                angular_speed = -1 * self._robotmotion._angular_speed
             else:
                 # obstacle in right or back sector
                 rospy.logdebug('action: 2 not executed, will hit obstacle')
@@ -512,7 +508,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             pass
 
         self._move_base( linear_speed, angular_speed,
-                         self._motion_error, self._update_rate )
+                         self._robotmotion._motion_error, self._robotmotion._update_rate )
 
         self._last_action = action
         rospy.logdebug('action: {0}'.format(action))
@@ -883,21 +879,23 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 for idx in range(len(scan_msg.ranges)):
                     lrange = scan_msg.ranges[idx]
                     if np.isinf(lrange):
-                        self._scan_ranges.append(self._max_laser_value)
+                        # if lrange is inf store max laser scan range value
+                        self._scan_ranges.append(self._laserscanner._max_laser_value)
                         continue
                     elif np.isnan(lrange):
-                        self._scan_ranges.append(self._min_laser_value)
+                        # if lrange is nan store min laser scan range value
+                        self._scan_ranges.append(self._laserscanner._min_laser_value)
                         continue
                     else:
                         self._scan_ranges.append(lrange)
 
-                    # if beam hits obstacle, store bean endpoint
+                    # if beam hits obstacle, store bean endpoint => for plotting
                     langle = gt_a + scan_msg.angle_min + ( idx * scan_msg.angle_increment )
                     x = gt_x + lrange * np.cos(langle) / scale
                     y = gt_y + lrange * np.sin(langle) / scale
                     scan_points.append([x, y])
 
-                    # store shortest beam range with angle per sector
+                    # store shortest beam range with angle per sector => for obstacle checking
                     collision_idx = idx//self._sector_angle
                     if lrange < self._sector_laser_scan[collision_idx][0]:
                         self._sector_laser_scan[collision_idx][0] = lrange
