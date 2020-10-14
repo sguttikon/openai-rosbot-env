@@ -172,7 +172,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         topic_name = '/amcl_pose'
         topic_class = PoseWithCovarianceStamped
-        time_out = 1.0
+        time_out = 5.0
         pose_msg = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
 
         if pose_msg is not None:
@@ -192,7 +192,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         rospy.logdebug('TurtleBot3LocalizeEnv._check_gazebo_data_is_ready() start')
         topic_name = '/gazebo/model_states'
         topic_class = ModelStates
-        time_out = 1.0
+        time_out = 5.0
         data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
 
         # TODO: do we also need twist (velocity) of turtlebot ??
@@ -230,7 +230,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         rospy.logdebug('TurtleBot3LocalizeEnv._check_laser_scan_is_ready() start')
         topic_name = '/scan'
         topic_class = LaserScan
-        time_out = 1.0
+        time_out = 5.0
         data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
 
         if data is not None:
@@ -304,7 +304,6 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._init_pose_pub.publish(init_pose_msg)
 
         if is_global:
-            # TODO: do we need selective resampling ??
 
             # dynamic reconfigure
             particles = 10000   # Note: only max 10000 is getting accepted

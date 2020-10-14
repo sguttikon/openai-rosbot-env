@@ -197,7 +197,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         rospy.logdebug('TurtleBot3Env._check_laser_scan_is_ready() start')
         topic_name = '/scan'
         topic_class = LaserScan
-        time_out = 1.0
+        time_out = 5.0
         self._laser_scan  = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
         return self._laser_scan
 
@@ -322,7 +322,12 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         """
 
         # wait until the service becomes available
-        rospy.wait_for_service(service_name, timeout=None)
+        try:
+            rospy.wait_for_service(service_name, timeout=10)
+        except rospy.ROSException as e:
+            rospy.logerr('service %s is not available due to %s', service_name, e)
+            return
+
         # create callable proxy to the service
         service_proxy = rospy.ServiceProxy(service_name, service_class)
 

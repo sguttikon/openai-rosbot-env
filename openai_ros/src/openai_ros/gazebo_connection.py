@@ -90,7 +90,12 @@ class GazeboConnection():
         """
 
         # wait until the service becomes available
-        rospy.wait_for_service(service_name, timeout=None)
+        try:
+            rospy.wait_for_service(service_name, timeout=10)
+        except rospy.ROSException as e:
+            rospy.logerr('service %s is not available due to %s', service_name, e)
+            return
+
         # create callable proxy to the service
         service_proxy = rospy.ServiceProxy(service_name, service_class)
 
