@@ -235,7 +235,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         self._odom_data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
         return self._odom_data
 
-    def _check_topic_data_is_ready(self, topic_name: str, topic_class, time_out: float):
+    def _check_topic_data_is_ready(self, topic_name: str, topic_class, time_out: float, max_retry: int = 5):
         """
         Check whether the topic is operational by
             1. subscribing to topic_name
@@ -250,6 +250,8 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             topic type
         time_out:
             timeout in seconds
+        max_retry: int
+            maximum number of times to retry waiting for message
 
         Returns
         -------
@@ -257,21 +259,24 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             message received from topic
         """
 
-        # TODO: do we need to add max retry limit ??
-
+        counter = 0
         response = None
         # loop until the ros is shutdown or received successfully message from topic
         while response is None and not rospy.is_shutdown():
-            try:
-                # create a new subscription to topic, receive one message and then unsubscribe
-                response = rospy.wait_for_message(topic_name, topic_class, timeout = time_out)
-            except rospy.ROSException as e:
-                # do nothing
-                pass
+            if counter < max_retry:
+                try:
+                    # create a new subscription to topic, receive one message and then unsubscribe
+                    response = rospy.wait_for_message(topic_name, topic_class, timeout = time_out)
+                except rospy.ROSException as e:
+                    counter += 1
+            else:
+                # max retry count reached
+                rospy.logerr('wait for message from topic %s failed', topic_name)
+                break
 
         return response
 
-    def _check_publisher_is_ready(self, publisher, max_retry: int = 10):
+    def _check_publisher_is_ready(self, publisher, max_retry: int = 5):
         """
         Check whether publisher is operational by checking the number of connections
 
@@ -283,7 +288,6 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             maximum number of times to retry checking the publisher connections
         """
 
-        # TODO: do we need to add max retry limit ??
         counter = 0
         rate = rospy.Rate(10) # 10hz
         while publisher.get_num_connections() == 0 and not rospy.is_shutdown():
@@ -297,7 +301,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
                 rospy.logerr('publisher is not ready')
                 break
 
-    def _call_service(self, service_name: str, service_class, max_retry: int = 10):
+    def _call_service(self, service_name: str, service_class, max_retry: int = 5):
         """
         Create a service proxy for given service_name and service_class and
         call the service
