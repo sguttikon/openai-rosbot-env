@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 
+import sys
+def set_path(path: str):
+    try:
+        sys.path.index(path)
+    except ValueError:
+        sys.path.insert(0, path)
+
+# set programatically the path to 'openai_ros' directory (alternately can also set PYTHONPATH)
+set_path('/media/suresh/research/awesome-robotics/active-slam/catkin_ws/src/openai-rosbot-env/openai_ros/src')
+
 import rospy
 from std_srvs.srv import Empty
 from gazebo_msgs.msg import ModelState, ModelStates
 from gazebo_msgs.srv import *
 from geometry_msgs.msg import Pose
 import rospkg
-import pojo
-import utils
+from openai_ros import pojo, utils
 import time
 
 class GazeboConnection():
@@ -27,17 +36,22 @@ class GazeboConnection():
 
         """
 
+        # HACK: unpause the simulation
+        self.unpause_sim()
+
         # reset the simulation
         self._reset_type = reset_type
         self.reset_sim()
 
-        # HACK: pause the simulation
-        self.pause_sim()
-
         # assuming by default we have ground_plane
         self.__init_models = ['ground_plane']
         self.__current_models = []
-        self.__current_models.extend(self.__init_models)
+        data = self.get_all_model_states()
+        if data is not None:
+            self.__current_models.extend(data.name)
+
+        # HACK: pause the simulation
+        self.pause_sim()
 
         rospy.loginfo('status: gazebo connection establised')
 
@@ -96,11 +110,9 @@ class GazeboConnection():
                     default is gazebo world frame
         """
 
-        if model_name in self.__current_models or \
-            gazebo.get_model_state(model_name) is not None:
+        if model_name in self.__current_models :
             rospy.logwarn('model: %s already exists in gazebo so will be respawned', model_name)
             self.delete_model(model_name)
-            time.sleep(0.2)
 
         model_path = rospkg.RosPack().get_path('indoor_layouts') + '/models/'
         with open (model_path + model_name + '/model.sdf', 'r') as xml_file:
@@ -112,7 +124,7 @@ class GazeboConnection():
         service_req = SpawnModelRequest()
         service_req.model_name = model_name
         service_req.model_xml = model_xml
-        service_req.initial_pose = pose
+        service_req.initial_pose = initial_pose
         service_req.robot_namespace = robot_namespace
         service_req.reference_frame = reference_frame
 
@@ -143,6 +155,7 @@ class GazeboConnection():
                 self.__current_models.remove(model_name)
         else:
             rospy.logwarn(response.status_message)
+        time.sleep(0.2) # wait for some time
 
     def set_model_state(self, model_state):
         """
@@ -203,15 +216,21 @@ class GazeboConnection():
         Clears all models that are not in __init_models list
         """
 
+        for model_name in self.__current_models:
+            # delete if not a initial model
+            if model_name not in self.__init_models:
+                self.delete_model(model_name)
+
+    def get_all_model_states(self):
+        """
+        Gets the all model states from gazebo through topic message
+        """
+
         topic_name = '/gazebo/model_states'
         topic_class = ModelStates
         data = utils.receive_topic_msg(topic_name, topic_class)
 
-        if data is not None:
-            for model_name in data.name:
-                # if not a initial model delete
-                if model_name not in self.__init_models:
-                    self.delete_model(model_name)
+        return data
 
 if __name__ == '__main__':
     rospy.init_node('gazebo_connection')
@@ -222,7 +241,7 @@ if __name__ == '__main__':
     # pose.position.y = 1
     # pose.position.z = 1
     # gazebo.spawn_sdf_model('sample',pose)
-    #gazebo.delete_model('sample')
+    # gazebo.delete_model('sample')
 
     # model_state = ModelState()
     # model_state.model_name = 'sample'

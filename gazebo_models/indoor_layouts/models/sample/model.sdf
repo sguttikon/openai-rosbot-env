@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <sdf version="1.4">
-  <model name="map">
+  <model name="sample">
     <link name="link">
       <inertial>
         <mass>15</mass>
