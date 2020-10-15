@@ -4,6 +4,8 @@ import rospy
 import gym
 from gym.utils import seeding
 from openai_ros.gazebo_connection import GazeboConnection
+from geometry_msgs.msg import *
+import time
 
 class RosbotGazeboEnv(gym.Env):
     """
@@ -113,7 +115,13 @@ class RosbotGazeboEnv(gym.Env):
         self.gazebo.pause_sim()
 
         # reset the gazebo
-        self.gazebo.reset_sim()
+        #self.gazebo.reset_sim()
+
+        self.gazebo.clear_all_spawned_models()
+        # TODO: sdf_model should randomly change
+        sdf_model = 'sample'
+        self.gazebo.spawn_sdf_model(sdf_model, Pose())
+
         # set environment variables each time we reset
         self._init_env_variables()
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
-from openai_ros import rosbot_gazebo_env
+from openai_ros import utils, rosbot_gazebo_env
 from sensor_msgs.msg import LaserScan, Imu
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist, PoseWithCovarianceStamped
@@ -134,7 +134,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         Checks command velocity publisher is operational
         """
         rospy.logdebug('TurtleBot3Env._check_cmd_vel_pub_ready() start')
-        self._check_publisher_is_ready(self._cmd_vel_pub)
+        utils.check_publisher_connections(self._cmd_vel_pub)
 
     def _check_map_data_is_ready(self):
         """
@@ -198,7 +198,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/scan'
         topic_class = LaserScan
         time_out = 5.0
-        self._laser_scan  = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+        self._laser_scan  = utils.receive_topic_msg(topic_name, topic_class, time_out)
         return self._laser_scan
 
     def _check_imu_data_is_ready(self):
@@ -215,7 +215,7 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/imu'
         topic_class = Imu
         time_out = 5.0
-        self._imu_data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+        self._imu_data = utils.receive_topic_msg(topic_name, topic_class, time_out)
         return self._imu_data
 
     def _check_odom_data_is_ready(self):
@@ -232,125 +232,8 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
         topic_name = '/odom'
         topic_class = Odometry
         time_out = 5.0
-        self._odom_data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+        self._odom_data = utils.receive_topic_msg(topic_name, topic_class, time_out)
         return self._odom_data
-
-    def _check_topic_data_is_ready(self, topic_name: str, topic_class, time_out: float, max_retry: int = 5):
-        """
-        Check whether the topic is operational by
-            1. subscribing to topic_name
-            2. receive one topic_class message
-            3. unsubscribe
-
-        Parameters
-        ----------
-        topic_name:
-            name of the topic
-        topic_class:
-            topic type
-        time_out:
-            timeout in seconds
-        max_retry: int
-            maximum number of times to retry waiting for message
-
-        Returns
-        -------
-        response: rospy.Message
-            message received from topic
-        """
-
-        counter = 0
-        response = None
-        # loop until the ros is shutdown or received successfully message from topic
-        while response is None and not rospy.is_shutdown():
-            if counter < max_retry:
-                try:
-                    # create a new subscription to topic, receive one message and then unsubscribe
-                    response = rospy.wait_for_message(topic_name, topic_class, timeout = time_out)
-                except rospy.ROSException as e:
-                    counter += 1
-            else:
-                # max retry count reached
-                rospy.logerr('wait for message from topic %s failed', topic_name)
-                break
-
-        return response
-
-    def _check_publisher_is_ready(self, publisher, max_retry: int = 5):
-        """
-        Check whether publisher is operational by checking the number of connections
-
-        Parameters
-        ----------
-        publisher:
-            publisher instance
-        max_retry: int
-            maximum number of times to retry checking the publisher connections
-        """
-
-        counter = 0
-        rate = rospy.Rate(10) # 10hz
-        while publisher.get_num_connections() == 0 and not rospy.is_shutdown():
-            if counter < max_retry:
-                try:
-                    rate.sleep()
-                except rospy.ROSInterruptException as e:
-                    counter += 1
-            else:
-                # max retry count reached
-                rospy.logerr('publisher is not ready')
-                break
-
-    def _call_service(self, service_name: str, service_class, max_retry: int = 5):
-        """
-        Create a service proxy for given service_name and service_class and
-        call the service
-
-        Parameters
-        ----------
-        service_name: str
-            name of the service
-        service_class:
-            service type
-        max_retry: int
-            maximum number of times to retry calling the service
-
-        Returns
-        -------
-        response:
-            response received from service call
-        """
-
-        # wait until the service becomes available
-        try:
-            rospy.wait_for_service(service_name, timeout=10)
-        except rospy.ROSException as e:
-            rospy.logerr('service %s is not available due to %s', service_name, e)
-            return
-
-        # create callable proxy to the service
-        service_proxy = rospy.ServiceProxy(service_name, service_class)
-
-        is_call_successful = False
-        counter = 0
-
-        response = None
-        # loop until the counter reached max retry limit or
-        # until the ros is shutdown or service call is successful
-        while not is_call_successful and not rospy.is_shutdown():
-            if counter < max_retry:
-                try:
-                    # call service
-                    response = service_proxy()
-                    is_call_successful = True
-                except rospy.ServiceException as e:
-                    # service call failed increment the counter
-                    counter += 1
-            else:
-                # max retry count reached
-                rospy.logerr('call to the service %s failed', service_name)
-                break
-        return response
 
     def _laser_scan_callback(self, data):
         """

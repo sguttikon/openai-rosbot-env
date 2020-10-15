@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
+import time
 
 def call_service(service_name: str, service_class, service_req = None, time_out: float = 5, max_retry: int = 5):
     """
@@ -46,7 +47,7 @@ def call_service(service_name: str, service_class, service_req = None, time_out:
                 counter += 1
         else:
             # max retry count reached
-            rospy.logerr('call to the service %s failed', service_name)
+            rospy.logwarn('call to the service %s failed', service_name)
             break
 
     return response, is_call_successful
@@ -77,7 +78,25 @@ def receive_topic_msg(topic_name: str, topic_class, time_out: float = 5, max_ret
                 counter += 1
         else:
             # max retry count reached
-            rospy.logerr('wait for message from topic %s failed', topic_name)
+            rospy.logwarn('wait for message from topic %s failed', topic_name)
             break
 
     return response
+
+def check_publisher_connections(publisher, max_retry: int = 5):
+    """
+    Check whether publisher is operational by checking the number of connections
+
+    :param publisher: publisher instance
+           int max_retry: maximum number of times to retry checking the publisher connections
+    """
+
+    counter = 0
+    while publisher.get_num_connections() == 0 and not rospy.is_shutdown():
+        if counter < max_retry:
+            time.sleep(0.5)
+            counter += 1
+        else:
+            # max retry count reached
+            rospy.logwarn('publisher %s is not ready', publisher.name)
+            break

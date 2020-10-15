@@ -18,6 +18,7 @@ from geometry_msgs.msg import Pose
 import rospkg
 from openai_ros import pojo, utils
 import time
+import os
 
 class GazeboConnection():
     """
@@ -44,7 +45,7 @@ class GazeboConnection():
         self.reset_sim()
 
         # assuming by default we have ground_plane
-        self.__init_models = ['ground_plane']
+        self.__init_models = ['ground_plane', 'turtlebot3']
         self.__current_models = []
         data = self.get_all_model_states()
         if data is not None:
@@ -115,9 +116,9 @@ class GazeboConnection():
             self.delete_model(model_name)
 
         model_path = rospkg.RosPack().get_path('indoor_layouts') + '/models/'
-        with open (model_path + model_name + '/model.sdf', 'r') as xml_file:
-            # this should be an urdf or gazebo xml
-            model_xml = xml_file.read().replace('\n', '')
+        file_xml = open(model_path + model_name + '/model.sdf')
+        # this should be an urdf or gazebo xml
+        model_xml = file_xml.read().replace('\n', '')
 
         service_name = '/gazebo/spawn_sdf_model'
         service_class = SpawnModel
@@ -132,7 +133,39 @@ class GazeboConnection():
         if is_successful and response.success:
             # add model from tracking list
             self.__current_models.append(model_name)
-            print(self.__current_models)
+        else:
+            rospy.logwarn(response.status_message)
+
+    def spawn_urdf_model(self, model_name: str, initial_pose, robot_namespace: str = '', reference_frame: str = 'world'):
+        """
+        Spawns a model (*.urdf) to gazebo through service call
+
+        :param str model_name: name of gazebo model to be spawn
+               geometry_msgs.msg._Pose.Pose initial_pose: initial pose of model
+               str robot_namespace: spawn model under this namespace
+               str reference_frame: initial_pose is defined relative to the frame of this model,
+                    default is gazebo world frame
+        """
+
+        model_path = rospkg.RosPack().get_path('turtlebot3_description') + '/urdf/'
+        p = os.popen("rosrun xacro xacro " + model_path + model_name + '_waffle.urdf.xacro')
+        # this should be an urdf or gazebo xml
+        model_xml = p.read().replace('\n', '')
+        p.close()
+
+        service_name = '/gazebo/spawn_urdf_model'
+        service_class = SpawnModel
+        service_req = SpawnModelRequest()
+        service_req.model_name = model_name
+        service_req.model_xml = model_xml
+        service_req.initial_pose = initial_pose
+        service_req.robot_namespace = robot_namespace
+        service_req.reference_frame = reference_frame
+
+        response, is_successful = utils.call_service(service_name, service_class, service_req)
+        if is_successful and response.success:
+            # add model from tracking list
+            self.__current_models.append(model_name)
         else:
             rospy.logwarn(response.status_message)
 
@@ -242,6 +275,12 @@ if __name__ == '__main__':
     # pose.position.z = 1
     # gazebo.spawn_sdf_model('sample',pose)
     # gazebo.delete_model('sample')
+
+    pose = Pose()
+    pose.position.x = 0
+    pose.position.y = -1
+    pose.position.z = 0
+    gazebo.spawn_urdf_model('turtlebot3', pose, 'turtlebot3', '')
 
     # model_state = ModelState()
     # model_state.model_name = 'sample'

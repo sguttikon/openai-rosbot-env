@@ -36,3 +36,4 @@ Gym - [doc](https://gym.openai.com/docs/)
 * assumption is all sensor data, poses, etc are in same frame ie. 'map'
 * fix for map2gazebo utf encoding error is to change lines open(export_dir + "/map.stl", 'w') => open(export_dir + "/map.stl", 'wb')
 * https://answers.gazebosim.org//question/16397/roslaunch-gazebo-2-process-has-died-pid-7605-exit-code-139/ => this issue occuring sometime ** need to fix **
+* deleting turtlebot3 model from gazebo not corresponding services & topics sor currently turtlebot3 is never removed after gazebo is launched

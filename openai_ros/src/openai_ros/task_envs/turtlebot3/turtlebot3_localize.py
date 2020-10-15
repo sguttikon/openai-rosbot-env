@@ -2,7 +2,7 @@
 
 import rospy
 from openai_ros.robot_envs import turtlebot3_env
-from openai_ros import utils
+from openai_ros import pojo, utils
 from gym import spaces
 from geometry_msgs.msg import *
 from gazebo_msgs.msg import ModelStates, ModelState
@@ -18,6 +18,7 @@ from matplotlib.patches import Ellipse
 from matplotlib import transforms
 import numpy as np
 import time
+import yaml
 
 class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
     """
@@ -39,7 +40,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # code related to  laser scan
         self._scan_ranges = []
-        self._laserscanner = utils.LaserScan()
+        self._laserscanner = pojo.LaserScan()
 
         # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
         #amcl_pose_high = np.array([384, 384, 1.0], dtype=np.float32)
@@ -51,7 +52,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                             self._laserscanner._scan_high, dtype=np.float32)
 
         # code related to motion commands
-        self._robotmotion = utils.RobotMotion()
+        self._robotmotion = pojo.RobotMotion()
 
         # code related to computing reward
         self._last_action = None
@@ -61,7 +62,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._ent_threshold = -1.0
 
         # fot turtlebot3
-        self._robot = utils.Robot()
+        self._robot = pojo.Robot()
         self._sector_angle = self._robot._sector_angle
         self._robot_radius = self._robot._robot_radius
         self._sector_laser_scan = np.zeros((360//self._sector_angle, 2), dtype=float) # anti-clockwise
@@ -162,7 +163,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         topic_name = '/particlecloud'
         topic_class = PoseArray
         time_out = 5.0
-        particle_msg = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+        particle_msg = utils.receive_topic_msg(topic_name, topic_class, time_out)
 
         if particle_msg is not None:
             if particle_msg.header.frame_id != self._global_frame_id:
@@ -173,7 +174,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         topic_name = '/amcl_pose'
         topic_class = PoseWithCovarianceStamped
         time_out = 5.0
-        pose_msg = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+        pose_msg = utils.receive_topic_msg(topic_name, topic_class, time_out)
 
         if pose_msg is not None:
             if pose_msg.header.frame_id != self._global_frame_id:
@@ -193,7 +194,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         topic_name = '/gazebo/model_states'
         topic_class = ModelStates
         time_out = 5.0
-        data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+        data = utils.receive_topic_msg(topic_name, topic_class, time_out)
 
         # TODO: do we also need twist (velocity) of turtlebot ??
         # preprocess received data
@@ -231,7 +232,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         topic_name = '/scan'
         topic_class = LaserScan
         time_out = 5.0
-        data = self._check_topic_data_is_ready(topic_name, topic_class, time_out)
+        data = utils.receive_topic_msg(topic_name, topic_class, time_out)
 
         if data is not None:
             self._laser_scan = self.__process_laser_msg(data)
@@ -241,14 +242,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Checks initial pose publisher is operational
         """
         rospy.logdebug('TurtleBot3LocalizeEnv._check_init_pose_pub_ready() start')
-        self._check_publisher_is_ready(self._init_pose_pub)
+        utils.check_publisher_connections(self._init_pose_pub)
 
     def _check_gazebo_pose_pub_ready(self):
         """
         Checks gazebo pose publisher is operational
         """
         rospy.logdebug('TurtleBot3LocalizeEnv._check_gazebo_pose_pub_ready() start')
-        self._check_publisher_is_ready(self._gazebo_pose_pub)
+        utils.check_publisher_connections(self._gazebo_pose_pub)
 
     def _check_map_data_is_ready(self):
         """
@@ -258,7 +259,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         rospy.logdebug('TurtleBot3LocalizeEnv._check_map_data_is_ready() start')
         service_name = '/static_map'
         service_class = GetMap
-        msg = self._call_service(service_name, service_class)
+        msg, _ = utils.call_service(service_name, service_class)
 
         if msg.map.header.frame_id != self._global_frame_id:
             rospy.logwarn('received map must be in the global frame')
@@ -324,7 +325,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         service_name = '/global_localization'
         service_class = Empty
-        self._call_service(service_name, service_class)
+        utils.call_service(service_name, service_class)
 
     def _set_init_pose(self):
         """
@@ -542,7 +543,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Draw environment map
 
-        :param utils.Map map: map of robot's environment
+        :param pojo.Map map: map of robot's environment
         """
 
         if self._is_new_map:
@@ -581,7 +582,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Draw robot pose
 
-        :param utils.Pose robot_pose: robot's pose
+        :param pojo.Pose robot_pose: robot's pose
                matplotlib.patches.Wedge pose_plt: plot of robot position
                matplotlib.lines.Line2D heading_plt: plot of robot heading
                str color: color used to render robot position and heading
@@ -613,7 +614,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Draw robot surroundings
 
-        :param utils.Robot robot: robot details
+        :param pojo.Robot robot: robot details
                dict surroundings_plt: plots of surroundings of robot
         :return dict
         """
@@ -684,7 +685,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Draw confidence ellipse around the robot pose
 
-        :param utils.Pose robot_pose: robot's pose
+        :param pojo.Pose robot_pose: robot's pose
                matplotlib.patches.Wedge confidence_plt: plot of robot position confidence
                str color: color used to render robot position confidence
                float n_std: number of std to determine ellipse's radius
@@ -764,7 +765,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Process the received pose message
 
         :param geometry_msgs.msg._PoseWithCovariance.PoseWithCovariance pose_cov_msg: pose with covariance message
-        :return utils.Pose
+        :return pojo.Pose
         """
 
         # initialize pose
@@ -781,11 +782,11 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Process the received pose message
 
         :param geometry_msgs.msg._Pose.Pose pose_msg: pose message
-        :return utils.Pose
+        :return pojo.Pose
         """
 
         # initialize pose
-        pose = utils.Pose()
+        pose = pojo.Pose()
         pose.set_position(
             pose_msg.position.x,
             pose_msg.position.y,
@@ -804,11 +805,11 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         Process the received map message
 
         :param nav_msgs.msg._OccupancyGrid.OccupancyGrid msg_map: map message
-        :return utils.Map
+        :return pojo.Map
         """
 
         # initialize map
-        map = utils.Map()
+        map = pojo.Map()
         map.set_scale(msg_map.info.resolution)
         map.set_size(msg_map.info.width, msg_map.info.height)
         map.set_origin(self.__process_pose_msg(msg_map.info.origin))
@@ -891,7 +892,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                         self._sector_laser_scan[collision_idx][1] = langle
             else:
                 # show scan w.r.t groundtruth pose
-                self._check_gazebo_data_is_ready()  # get latest _gt_pose
+                #self._check_gazebo_data_is_ready()  # get latest _gt_pose
                 gt_x, gt_y, _ = self._robot.get_pose().get_position()
                 _, _, gt_a = self._robot.get_pose().get_euler()
                 scale = self._map_data.get_scale()
@@ -931,8 +932,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
         Calculate the squared euclidean distance between two pose + covariance
 
-        :param utils.Pose pose1: pose1
-               utils.Pose pose2: pose2
+        :param pojo.Pose pose1: pose1
+               pojo.Pose pose2: pose2
         :return float
         """
 
@@ -943,4 +944,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         return sqr_dist_err
 
+    def _set_map(self, map_file):
+        """
+        """
+
+        with open("$(find indoor_layouts)/map/sample/sample_layout.yaml", "r") as f:
+            data = yaml.load(f, Loader = yaml.FullLoader)
     ###### private methods ######
