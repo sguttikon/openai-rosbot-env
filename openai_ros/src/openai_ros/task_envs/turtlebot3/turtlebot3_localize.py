@@ -191,22 +191,32 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         """
 
         rospy.logdebug('TurtleBot3LocalizeEnv._check_gazebo_data_is_ready() start')
-        topic_name = '/gazebo/model_states'
-        topic_class = ModelStates
-        time_out = 5.0
-        data = utils.receive_topic_msg(topic_name, topic_class, time_out)
+        use_service = True
+        pose_msg = None
+        if use_service:
+            response = self.gazebo.get_model_state(self._robot._rosbot_name)
+            if response is not None and response.success:
+                pose_msg = response.pose
+        else:
+            topic_name = '/gazebo/model_states'
+            topic_class = ModelStates
+            time_out = 5.0
+            data = utils.receive_topic_msg(topic_name, topic_class, time_out)
 
-        # TODO: do we also need twist (velocity) of turtlebot ??
-        # preprocess received data
-        if data is not None:
-            rosbot_name = self._robot._rosbot_name
-            if rosbot_name in data.name:
-                turtlebot_idx = data.name.index(rosbot_name)
-                # retrieve ground truth pose from gazebo simulation
-                gt_pose = self.__process_pose_msg(data.pose[turtlebot_idx])
-                self._robot.set_pose(gt_pose, self._map_data.get_scale())
-            else:
-                rospy.logwarn('cannot retrieve ground truth pose')
+            # TODO: do we also need twist (velocity) of turtlebot ??
+            # preprocess received data
+            if data is not None:
+                rosbot_name = self._robot._rosbot_name
+                if rosbot_name in data.name:
+                    turtlebot_idx = data.name.index(rosbot_name)
+                    pose_msg = data.pose[turtlebot_idx]
+
+        if pose_msg is not None:
+            # retrieve ground truth pose from gazebo simulation
+            gt_pose = self.__process_pose_msg(pose_msg)
+            self._robot.set_pose(gt_pose, self._map_data.get_scale())
+        else:
+            rospy.logwarn('cannot retrieve ground truth pose')
 
     def _laser_scan_callback(self, data):
         """
@@ -892,7 +902,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                         self._sector_laser_scan[collision_idx][1] = langle
             else:
                 # show scan w.r.t groundtruth pose
-                #self._check_gazebo_data_is_ready()  # get latest _gt_pose
+                self._check_gazebo_data_is_ready()  # get latest _gt_pose
                 gt_x, gt_y, _ = self._robot.get_pose().get_position()
                 _, _, gt_a = self._robot.get_pose().get_euler()
                 scale = self._map_data.get_scale()

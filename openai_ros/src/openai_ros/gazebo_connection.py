@@ -195,7 +195,6 @@ class GazeboConnection():
         Sets the model state in gazebo through service call
 
         :param gazebo_msgs.msg._ModelState.ModelState model_state: gazebo model pose and twist
-        :return response received from service call
         """
 
         service_name = '/gazebo/set_model_state'
@@ -216,7 +215,7 @@ class GazeboConnection():
         :param str model_name: name of gazebo model
                str relative_entity_name: return pose and twist relative to this entity,
                     default is gazebo world frame
-        :return pojo.Pose
+        :return response received from service call
         """
 
         service_name = '/gazebo/get_model_state'
@@ -226,23 +225,7 @@ class GazeboConnection():
         service_req.relative_entity_name = relative_entity_name
 
         response, is_successful = utils.call_service(service_name, service_class, service_req)
-        pose = None
-        if is_successful and response.success:
-            pose = pojo.Pose()
-            pose._frame_id = response.header.frame_id
-            pose.set_position(response.pose.position.x,
-                              response.pose.position.y,
-                              response.pose.position.z)
-            pose.set_quaternion(response.pose.orientation.x,
-                                response.pose.orientation.y,
-                                response.pose.orientation.z,
-                                response.pose.orientation.w)
-            # TODO: twist ??
-
-        else:
-            rospy.logwarn(response.status_message)
-
-        return pose
+        return response
 
     def clear_all_spawned_models(self):
         """
