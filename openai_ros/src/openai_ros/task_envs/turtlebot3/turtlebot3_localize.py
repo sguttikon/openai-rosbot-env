@@ -43,13 +43,15 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._laserscanner = pojo.LaserScan()
 
         # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
-        #amcl_pose_high = np.array([384, 384, 1.0], dtype=np.float32)
+        max_particles = 20000
+        amcl_pose_high = np.array([384, 384, 1.0] * max_particles, dtype=np.float32).reshape(max_particles, 3)
 
         num_actions = 3
         self.action_space = spaces.Discrete(num_actions)
         self.reward_range = (-np.inf, np.inf)
-        self.observation_space = spaces.Box(self._laserscanner._scan_low,
-                            self._laserscanner._scan_high, dtype=np.float32)
+        # self.observation_space = spaces.Box(self._laserscanner._scan_low,
+        #                     self._laserscanner._scan_high, dtype=np.float32)
+        self.observation_space = spaces.Box(-amcl_pose_high, amcl_pose_high, dtype=np.float32)
 
         # code related to motion commands
         self._robotmotion = pojo.RobotMotion()
@@ -72,10 +74,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._is_new_map = False
         self._episode_done = False
         self._current_step = 0
-        self._max_steps = 100
+        self._max_steps = 200
         self._abort_episode = False
         self._success_episode = False
-        self._cumulated_reward = []
+        self._cumulated_reward = 0.0
         self._collision_action = False
 
         # code related to displaying results in matplotlib
@@ -361,14 +363,19 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         state_msg.pose.position.y = -1.0
 
         # uniform random orientation
-        quaternion = quaternion_from_euler(0.0, 0.0, np.random.random() * 2 * np.pi)
+        #quaternion = quaternion_from_euler(0.0, 0.0, np.random.random() * 2 * np.pi)
+        quaternion = quaternion_from_euler(0.0, 0.0, 0.0)
         state_msg.pose.orientation.x = quaternion[0]
         state_msg.pose.orientation.y = quaternion[1]
         state_msg.pose.orientation.z = quaternion[2]
         state_msg.pose.orientation.w = quaternion[3]
 
-        self._check_gazebo_pose_pub_ready()
-        self._gazebo_pose_pub.publish(state_msg)
+        use_service = True
+        if use_service:
+            self.gazebo.set_model_state(state_msg)
+        else:
+            self._check_gazebo_pose_pub_ready()
+            self._gazebo_pose_pub.publish(state_msg)
         time.sleep(0.2)
 
     def _init_env_variables(self):
@@ -381,7 +388,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._current_step = 0
         self._abort_episode = False
         self._success_episode = False
-        self._cumulated_reward.clear()
+        self._cumulated_reward = 0.0
         self._last_action = None
 
         # code realted to sensors data to access
@@ -409,8 +416,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # return {
         #     'particle_cloud' : self._particle_cloud
         # }
-        #return self._amcl_pose.get_position()
-        return np.asarray(self._scan_ranges)
+
+        #return np.asarray(self._scan_ranges)   # return scan ranges
+        return self._particle_cloud # return particle cloud`
 
 
     def _is_done(self):
@@ -453,7 +461,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         if self._collision_action:
             # negative reward for bad action choice
-            reward = -0.01
+            reward = -0.05
         elif self._abort_episode:
             # penalty if stuck or too close to obstacle
             reward = -1.0
@@ -464,8 +472,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             # to avoid division by zero
             #   sqr_error: error is always positive best value 0.0
             #   entropy: assuming 10e^-9 precision best value -5.0
-            dist_reward = 1 / (self._amcl_pose.get_estimate_error() - self._dist_threshold + 1)
-            entropy_reward = 1 / (self._amcl_pose.get_entropy() - self._ent_threshold + 5)
+            dist_reward = 1 / (self._amcl_pose.get_estimate_error() - self._dist_threshold + 10)
+            entropy_reward = 1 / (self._amcl_pose.get_entropy() - self._ent_threshold + 10)
             reward = dist_reward + entropy_reward
             if self._last_action == 0:
                 # current action is go forward
@@ -473,13 +481,9 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             else:
                 # current action is to turn
                 reward += self._turn_reward
-
-            self._cumulated_reward.append([self._amcl_pose.get_estimate_error(),
-                                           self._amcl_pose.get_entropy(),
-                                           self._amcl_pose.get_position(),
-                                           self._robot.get_pose().get_position()])
+            self._cumulated_reward += reward
         if self._episode_done:
-            rospy.logdebug("episode ended with {0} steps and {1}".format(self._current_step, np.asarray(self._cumulated_reward)))
+            rospy.loginfo("episode ended successful: {0} in {1} steps and {2} total reward".format(self._success_episode, self._current_step, self._cumulated_reward))
 
         return reward
 
