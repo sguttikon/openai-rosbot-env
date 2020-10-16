@@ -58,8 +58,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # code related to computing reward
         self._last_action = None
-        self._forward_reward = 0.1
-        self._turn_reward = 0.02
+        self._forward_reward = 0.5
+        self._turn_reward = 0.05
         self._dist_threshold = 10.0
         self._ent_threshold = -1.0
 
@@ -464,15 +464,15 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             reward = -0.05
         elif self._abort_episode:
             # penalty if stuck or too close to obstacle
-            reward = -1.0
+            reward = -10.0
         elif self._success_episode:
             # bonus reward if successful in task
-            reward = 5.0
+            reward = 25.0
         else:
             # to avoid division by zero
             #   sqr_error: error is always positive best value 0.0
             #   entropy: assuming 10e^-9 precision best value -5.0
-            dist_reward = 1 / (self._amcl_pose.get_estimate_error() - self._dist_threshold + 10)
+            dist_reward = 1 / (self._amcl_pose.get_estimate_error() + 1)
             entropy_reward = 1 / (self._amcl_pose.get_entropy() - self._ent_threshold + 10)
             reward = dist_reward + entropy_reward
             if self._last_action == 0:
@@ -481,7 +481,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             else:
                 # current action is to turn
                 reward += self._turn_reward
-            self._cumulated_reward += reward
+        self._cumulated_reward += reward
         if self._episode_done:
             rospy.loginfo("episode ended successful: {0} in {1} steps and {2} total reward".format(self._success_episode, self._current_step, self._cumulated_reward))
 
