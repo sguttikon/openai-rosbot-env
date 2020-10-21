@@ -44,8 +44,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
         max_particles = 20000
-        amcl_pose_high = np.array([384, 384, 1.0] * max_particles, dtype=np.float32).reshape(max_particles, 3)
-
+        amcl_pose_high = np.array([np.inf, np.inf, np.inf] * max_particles, dtype=np.float32).reshape(max_particles, 3)
+        amcl_pose_high = amcl_pose_high.flatten()
         num_actions = 3
         self.action_space = spaces.Discrete(num_actions)
         self.reward_range = (-np.inf, np.inf)
@@ -58,8 +58,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # code related to computing reward
         self._last_action = None
-        self._forward_reward = 0.5
-        self._turn_reward = 0.05
+        self._forward_reward = -0.05    # cost to move forward
+        self._turn_reward = -0.05       # cost to turn
         self._dist_threshold = 10.0
         self._ent_threshold = -1.0
 
@@ -418,7 +418,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # }
 
         #return np.asarray(self._scan_ranges)   # return scan ranges
-        return self._particle_cloud # return particle cloud`
+        return self._particle_cloud.flatten() # return particle cloud
 
 
     def _is_done(self):
@@ -771,7 +771,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             _, _, yaw = pose.get_euler()
             poses.append([x, y, yaw])
 
-        poses = np.asarray(poses)
+        poses = np.asarray(poses).astype(np.float32)
         return poses
 
     def __process_pose_cov_msg(self, pose_cov_msg):
