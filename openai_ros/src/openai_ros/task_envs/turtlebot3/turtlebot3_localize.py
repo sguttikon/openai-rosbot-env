@@ -42,16 +42,22 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self._scan_ranges = []
         self._laserscanner = pojo.LaserScan()
 
-        # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
-        max_particles = 20000
-        amcl_pose_high = np.array([np.inf, np.inf, np.inf] * max_particles, dtype=np.float32).reshape(max_particles, 3)
-        amcl_pose_high = amcl_pose_high.flatten()
         num_actions = 3
         self.action_space = spaces.Discrete(num_actions)
         self.reward_range = (-np.inf, np.inf)
-        # self.observation_space = spaces.Box(self._laserscanner._scan_low,
-        #                     self._laserscanner._scan_high, dtype=np.float32)
-        self.observation_space = spaces.Box(-amcl_pose_high, amcl_pose_high, dtype=np.float32)
+
+        self._obs_type = 'LASER'
+        if self._obs_type == 'LASER':
+            self.observation_space = spaces.Box(self._laserscanner._scan_low, \
+                                self._laserscanner._scan_high, dtype=np.float32)
+        elif self._obs_type == 'PARTCILES':
+            # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
+            max_amcl_particles = 20000
+            amcl_pose_high = np.array([np.inf, np.inf, np.inf] * max_amcl_particles, \
+                             dtype=np.float32).reshape(max_particles, 3)
+            amcl_pose_high = amcl_pose_high.flatten()
+            self.observation_space = spaces.Box(-amcl_pose_high, amcl_pose_high, \
+                             dtype=np.float32)
 
         # code related to motion commands
         self._robotmotion = pojo.RobotMotion()
@@ -421,13 +427,10 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         # update the surroundings of the robot based on laser scan data
         self._robot.update_surroundings(self._sector_laser_scan)
 
-        # return {
-        #     'particle_cloud' : self._particle_cloud
-        # }
-
-        #return np.asarray(self._scan_ranges)   # return scan ranges
-        return self._particle_cloud.flatten() # return particle cloud
-
+        if self._obs_type == 'LASER':
+            return np.asarray(self._scan_ranges)   # return scan ranges
+        elif self._obs_type == 'PARTCILES':
+            return self._particle_cloud.flatten() # return particle cloud
 
     def _is_done(self):
         """
