@@ -12,6 +12,8 @@ class RosbotGazeboEnv(gym.Env):
         RosbotGazeboEnv class acts as abstract gym environment template
     """
 
+    metadata = {'render.modes': ['human']}
+
     def __init__(self, reset_type: str = 'SIMULATION'):
         """
         Initialize RosbotGazeboEnv class
@@ -26,6 +28,13 @@ class RosbotGazeboEnv(gym.Env):
 
         # create GazeboConnection instance
         self.gazebo = GazeboConnection(reset_type = reset_type)
+
+    def seed(self, seed=None):
+        """
+        Set the random seed value for the gym environment
+        """
+        self.np_random, seed = seeding.np_random(seed)
+        return [seed]
 
     def reset(self):
         """
@@ -56,13 +65,13 @@ class RosbotGazeboEnv(gym.Env):
         rospy.loginfo('status: environment is closed')
         rospy.loginfo('======================================')
 
-    def render(self):
+    def render(self, mode='human'):
         """
         Override gym environment render() with custom logic
 
         """
 
-        super(RosbotGazeboEnv, self).render(mode='human')
+        super(RosbotGazeboEnv, self).render(mode=mode)
 
     def step(self, action):
         """

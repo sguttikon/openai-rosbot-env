@@ -347,9 +347,10 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
             # TODO: check if robot has crashed
 
             current_odom = self._check_odom_data_is_ready()
+            duration = rospy.get_rostime().to_sec() - start_time
             if current_odom is None:
                 # odom data not available
-                duration = rospy.get_rostime().to_sec() - start_time
+                rospy.logwarn('odom is not available')
                 break
 
             odom_linear_vel = current_odom.twist.twist.linear.x
@@ -365,7 +366,6 @@ class TurtleBot3Env(rosbot_gazebo_env.RosbotGazeboEnv):
                                     (odom_angular_vel > min_angular_speed)
                                    )
 
-            duration = rospy.get_rostime().to_sec() - start_time
             if is_linear_vel_valid and is_angular_vel_valid:
                 # required twist achieved
                 break

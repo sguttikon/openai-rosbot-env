@@ -58,8 +58,8 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # code related to computing reward
         self._last_action = None
-        self._forward_reward = -0.05    # cost to move forward
-        self._turn_reward = -0.05       # cost to turn
+        self._forward_reward = 0.5    # cost to move forward
+        self._turn_reward = 0.1       # cost to turn
         self._dist_threshold = 10.0
         self._ent_threshold = -1.0
 
@@ -214,7 +214,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                     pose_msg = data.pose[turtlebot_idx]
 
         if pose_msg is not None:
-            # retrieve ground truth pose from gazebo simulation
+            # retrieve ground truth pose from gazebo simulation and convert to map frame
             gt_pose = self.__process_pose_msg(pose_msg)
             self._robot.set_pose(gt_pose, self._map_data.get_scale())
         else:
@@ -359,7 +359,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         # TODO: position also need to be random
         # uniform random position
-        state_msg.pose.position.x = 0.0
+        state_msg.pose.position.x = np.random.uniform(-1.0, 1.0)
         state_msg.pose.position.y = -1.0
 
         # uniform random orientation
@@ -377,6 +377,14 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             self._check_gazebo_pose_pub_ready()
             self._gazebo_pose_pub.publish(state_msg)
         time.sleep(0.2)
+
+        response = self.gazebo.get_model_state(state_msg.model_name)
+        if response.success:
+            current_pose = self.__process_pose_msg(response.pose)
+            rospy.logdebug('initial robot pose: [{0:.3f}, {1:.3f}, {2:.3f}]'.\
+                    format(current_pose.get_position()[0],
+                           current_pose.get_position()[1],
+                           current_pose.get_euler()[2]) )
 
     def _init_env_variables(self):
         """
@@ -427,15 +435,16 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
-        left_details = self._robot.get_surroundings()['left']
-        back_details = self._robot.get_surroundings()['back']
-        right_details = self._robot.get_surroundings()['right']
-        front_details = self._robot.get_surroundings()['front']
-        if self._robot.get_too_close() or (
-            front_details['obstacle_sector'] == 1 and \
-            back_details['obstacle_sector'] == 1 and \
-                (left_details['obstacle_sector'] == 1 or \
-                    right_details['obstacle_sector'] == 1)):
+        # left_details = self._robot.get_surroundings()['left']
+        # back_details = self._robot.get_surroundings()['back']
+        # right_details = self._robot.get_surroundings()['right']
+        # front_details = self._robot.get_surroundings()['front']
+        # if self._robot.get_too_close() or (
+        #     front_details['obstacle_sector'] == 1 and \
+        #     back_details['obstacle_sector'] == 1 and \
+        #         (left_details['obstacle_sector'] == 1 or \
+        #             right_details['obstacle_sector'] == 1)):
+        if self._robot.get_too_close():
             # abort episode if robot is stuck (atleast 3 direction has obstacles)
             # or too close to obstacle
             self._abort_episode = self._episode_done = True
@@ -482,7 +491,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
                 # current action is to turn
                 reward += self._turn_reward
         self._cumulated_reward += reward
-        if self._episode_done:
+        if done:
             rospy.loginfo("episode ended successful: {0} in {1} steps and {2} total reward".format(self._success_episode, self._current_step, self._cumulated_reward))
 
         return reward
@@ -503,51 +512,57 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
 
         """
 
-        if self._robot.get_too_close():
-            rospy.logwarn('too close obstacle episode will be terminated')
-            return
+        # if self._robot.get_too_close():
+        #     rospy.logwarn('too close obstacle episode will be terminated')
+        #     return
 
-        # increment step counter
-        self._current_step += 1
         self._collision_action = False
         linear_speed = 0.0
         angular_speed = 0.0
 
-        left_details = self._robot.get_surroundings()['left']
-        back_details = self._robot.get_surroundings()['back']
-        right_details = self._robot.get_surroundings()['right']
-        front_details = self._robot.get_surroundings()['front']
+        # left_details = self._robot.get_surroundings()['left']
+        # back_details = self._robot.get_surroundings()['back']
+        # right_details = self._robot.get_surroundings()['right']
+        # front_details = self._robot.get_surroundings()['front']
 
         if action == 0:     # move forward
-            if front_details['obstacle_sector'] == 0:
-                linear_speed = self._robotmotion._linear_forward_speed
-                angular_speed = 0.0
-            else:
-                # obstacle in front sector
-                rospy.logdebug('action: 0 not executed, will hit obstacle')
-                self._collision_action = True
+            # if front_details['obstacle_sector'] == 0:
+            #     linear_speed = self._robotmotion._linear_forward_speed
+            #     angular_speed = 0.0
+            # else:
+            #     # obstacle in front sector
+            #     rospy.logdebug('action: 0 not executed, will hit obstacle')
+            #     self._collision_action = True
+            linear_speed = self._robotmotion._linear_forward_speed
+            angular_speed = 0.0
         elif action == 1:   # turn left
-            if left_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
-                linear_speed = self._robotmotion._linear_turn_speed
-                angular_speed = self._robotmotion._angular_speed
-            else:
-                # obstacle in left or back sector
-                rospy.logdebug('action: 1 not executed, will hit obstacle')
-                self._collision_action = True
+            # if left_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
+            #     linear_speed = self._robotmotion._linear_turn_speed
+            #     angular_speed = self._robotmotion._angular_speed
+            # else:
+            #     # obstacle in left or back sector
+            #     rospy.logdebug('action: 1 not executed, will hit obstacle')
+            #     self._collision_action = True
+            linear_speed = self._robotmotion._linear_turn_speed
+            angular_speed = self._robotmotion._angular_speed
         elif action == 2:   # turn right
-            if right_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
-                linear_speed = self._robotmotion._linear_turn_speed
-                angular_speed = -1 * self._robotmotion._angular_speed
-            else:
-                # obstacle in right or back sector
-                rospy.logdebug('action: 2 not executed, will hit obstacle')
-                self._collision_action = True
+            # if right_details['obstacle_sector'] == 0 and back_details['obstacle_sector'] == 0:
+            #     linear_speed = self._robotmotion._linear_turn_speed
+            #     angular_speed = -1 * self._robotmotion._angular_speed
+            # else:
+            #     # obstacle in right or back sector
+            #     rospy.logdebug('action: 2 not executed, will hit obstacle')
+            #     self._collision_action = True
+            linear_speed = self._robotmotion._linear_turn_speed
+            angular_speed = -1 * self._robotmotion._angular_speed
         else:   # do nothing / stop
             pass
 
         self._move_base( linear_speed, angular_speed,
                          self._robotmotion._motion_error, self._robotmotion._update_rate )
 
+        # increment step counter
+        self._current_step += 1
         self._last_action = action
         rospy.logdebug('action: {0}'.format(action))
 
