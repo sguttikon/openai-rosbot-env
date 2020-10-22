@@ -29,6 +29,8 @@ class RosbotGazeboEnv(gym.Env):
         # create GazeboConnection instance
         self.gazebo = GazeboConnection(reset_type = reset_type)
 
+        self.seed()
+
     def seed(self, seed=None):
         """
         Set the random seed value for the gym environment

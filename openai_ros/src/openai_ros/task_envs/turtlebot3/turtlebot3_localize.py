@@ -46,7 +46,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
         self.action_space = spaces.Discrete(num_actions)
         self.reward_range = (-np.inf, np.inf)
 
-        self._obs_type = 'LASER'
+        self._obs_type = 'PARTCILES'
         if self._obs_type == 'LASER':
             self.observation_space = spaces.Box(self._laserscanner._scan_low, \
                                 self._laserscanner._scan_high, dtype=np.float32)

@@ -114,7 +114,7 @@ class Pose():
         self.__covariance = np.zeros((6, 6))
         self.__entropy = 0.0
         self.__error = 0.0
-        self._frame_id = 'world' 
+        self._frame_id = 'world'
 
     def set_position(self, x: float, y: float, z:float):
         """
@@ -494,6 +494,6 @@ class RobotMotion():
         self._update_rate = 30
         self._init_linear_speed = 0.0
         self._init_angular_speed = 0.0
-        self._linear_forward_speed = 0.4
+        self._linear_forward_speed = 0.3
         self._linear_turn_speed = 0.05
         self._angular_speed = 0.75
