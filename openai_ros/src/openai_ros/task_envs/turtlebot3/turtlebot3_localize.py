@@ -54,7 +54,7 @@ class TurtleBot3LocalizeEnv(turtlebot3_env.TurtleBot3Env):
             # for particle cloud [x_max, y_max, theta_max] for 384 x 384 map
             max_amcl_particles = 20000
             amcl_pose_high = np.array([np.inf, np.inf, np.inf] * max_amcl_particles, \
-                             dtype=np.float32).reshape(max_particles, 3)
+                             dtype=np.float32).reshape(max_amcl_particles, 3)
             amcl_pose_high = amcl_pose_high.flatten()
             self.observation_space = spaces.Box(-amcl_pose_high, amcl_pose_high, \
                              dtype=np.float32)
